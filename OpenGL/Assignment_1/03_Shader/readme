@@ -1,0 +1,459 @@
+## 1. Install Libaries
+
+### 1.1 Update Env
+```code 
+sudo apt update
+```
+### 1.2 Build and Make
+```code 
+sudo apt install build-essential
+```
+### 1.3 Install Mesa and GL
+```code 
+sudo apt install libgl1-mesa-dev
+```
+### 1.4 Install GLFW:
+- GLFW gives us the bare necessities required for rendering goodies to the screen
+- It allows us to create an OpenGL context, define window parameters, and handle user input, which is plenty enough for our purposes. 
+```code 
+sudo apt install libglfw3-dev
+```
+### 1.5 Install GLM for math
+```code 
+sudo apt install libglm-dev
+```
+### 1.6 Use
+```c 
+#include <GLFW/glfw3.h>
+```
+
+## 2. GLAD
+- Because OpenGL is only really a standard/specification it is up to the driver manufacturer to implement the specification to a driver that the specific graphics card supports
+- Since there are many different versions of OpenGL drivers, the location of most of its functions is not known at compile-time and needs to be queried at run-time.
+- GLAD uses a [web service](https://glad.dav1d.de/) where we can tell GLAD for which version of OpenGL we'd like to define and load all relevant OpenGL functions according to that version. 
+- Go to the GLAD web service, make sure the language is set to C++, and in the API section select an OpenGL **version of at least 3.3** (which is what we'll be using; higher versions are fine as well). Also make sure the profile is set to Core and that the Generate a loader option is ticked
+- GLAD by now should have provided you a zip file containing two include folders, and a single glad.c file. Copy both include folders (glad and KHR) into your include(s) directoy (or add an extra item pointing to these folders), and add the glad.c file to your project. 
+
+```code
+#include <glad/glad.h> 
+```
+
+## 3. Structure
+```bash
+nmc@nmc-desktop:~/WorkSpace/Program/Robot/OpenGL/Assignment_1$ tree
+.
+├── build
+│   └── opengl_app
+├── CMakeLists.txt
+├── glad
+│   ├── include
+│   │   ├── glad
+│   │   │   └── glad.h
+│   │   └── KHR
+│   │       └── khrplatform.h
+│   └── src
+│       └── glad.c
+├── main.cpp
+└── readme
+```
+
+## 4. Use
+``` bash
+mkdir build && cd build
+cmake ..
+make
+./opengl_app 
+```
+
+## 5. Tech
+### 5.1 Create Window 
+- [GLFW's window handling](https://www.glfw.org/docs/latest/window.html#window_hints) documentation
+
+### Double buffer
+- When an application draws in a single buffer the resulting image may display flickering issues
+- This is because the resulting output image is not drawn in an instant, but drawn pixel by pixel and usually from left to right and top to bottom
+- Because this image is not displayed at an instant to the user while still being rendered to, the result may contain artifacts.
+- To circumvent these issues, windowing applications apply a double buffer for rendering.
+- The front buffer contains the final output image that is shown at the screen, while all the rendering commands draw to the back buffer. As soon as all the rendering commands are finished we swap the back buffer to the front buffer so the image can be displayed without still being rendered to, removing all the aforementioned artifacts. 
+
+### glClearColor & glClear
+the **glClearColor** function is a state-setting function and **glClear** is a state-using function in that it uses the current state to retrieve the clearing color from. 
+
+# 3D Graphics Rendering Pipeline
+The graphics pipeline can be divided into two large parts
+- The first transforms your 3D coordinates into 2D coordinates 
+- The second part transforms the 2D coordinates into actual colored pixels
+
+All of these steps are highly specialized (they have one specific function) and can easily be executed in parallel.
+
+The processing cores run small programs on the GPU for each step of the pipeline. These small programs are called shaders (GLSL). 
+![alt text](../Image/image.png)
+- ***Vertex data is a collection of vertices***. A vertex is a collection of data per 3D coordinate. This vertex's data is represented using vertex attributes that can contain any data we'd like (**3D position and some color value**).
+    - In order for OpenGL to know what to make of your collection of coordinates and color values OpenGL requires you to hint what kind of render types you want to form with the data (**GL_POINTS**, **GL_TRIANGLES**, **GL_LINE_STRIP**).
+- ***Vertex shader*** that takes as input a single vertex. The main purpose of the vertex shader is to transform 3D coordinates into different 3D coordinates.
+- The output of the vertex shader stage is optionally passed to the ***geometry shader***. The geometry shader takes as input a collection of vertices that form a primitive and has the ability to generate other shapes by emitting new vertices to form new (or other) primitive(s).
+- ***The primitive assembly*** stage takes as input all the vertices (or vertex if GL_POINTS is chosen) from the vertex (or geometry) shader that form one or more primitives and assembles all the point(s) in the primitive shape given;
+- The output of the primitive assembly stage is then passed on to the ***rasterization stage*** where it maps the resulting primitive(s) to the corresponding pixels on the final screen, resulting in fragments for the fragment shader to use. *Before the fragment shaders run, clipping is performed. Clipping discards all fragments that are outside your view, increasing performance* . 
+- ***The fragment shader*** is to calculate the final color of a pixel and this is usually the stage where all the advanced OpenGL effects occur. *(like lights, shadows, color of the light and so on)*. 
+- ***The final object*** will then pass through one more stage that we call the *alpha test and blending stage*. This stage checks the corresponding depth (and stencil) value of the fragment and uses those to check if ***the resulting fragment is in front or behind other objects and should be discarded accordingly***. The stage also checks for ***alpha values*** (alpha values define the opacity of an object) and blends the objects accordingly.
+
+OpenGL required to define at least a vertex and fragment shader of our own (there are no default vertex/fragment shaders on the GPU)
+
+
+# Vertex input
+- OpenGL only processes 3D coordinates when they're in a specific range between -1.0 and 1.0 on all 3 axes (x, y and z)
+- All coordinates within this so called ***normalized device coordinates*** range will end up visible on your screen (and all coordinates outside this region won't). 
+
+![alt text](../Image/image-1.png)
+
+```c
+float vertices[] = {
+    -0.5f, -0.5f, 0.0f,
+     0.5f, -0.5f, 0.0f,
+     0.0f,  0.5f, 0.0f
+};  
+```
+- Because OpenGL works in 3D space we render a 2D triangle with each vertex having a z coordinate of 0.0. This way the depth of the triangle remains the same making it look like it's 2D. 
+
+> Normalized Device Coordinates (NDC)
+
+>  Once your vertex coordinates have been processed in the vertex shader, they should be in normalized device coordinates which is a small space where the x, y and z values vary from -1.0 to 1.0. 
+> Any coordinates that fall outside this range will be discarded/clipped and won't be visible on your screen. Below you can see the triangle we specified within normalized device coordinates (ignoring the z axis):
+
+> Unlike usual screen coordinates the positive y-axis points in the up-direction and the (0,0) ***coordinates are at the center of the graph***, instead of top-left. Eventually you want all the (transformed) coordinates to end up in this coordinate space, otherwise they won't be visible. 
+
+> Your NDC coordinates will then be transformed to screen-space coordinates via the viewport transform using the data you provided with **glViewport**. 
+
+
+- The vertex shader. This is done by ***creating memory on the GPU where we store the vertex data, configure how OpenGL should interpret the memory and specify how to send the data to the graphics card***. The vertex shader then processes as much vertices as we tell it to from its memory. 
+- ***vertex buffer objects (VBO)*** that can store a large number of vertices in the GPU's memory. The advantage of using those buffer objects is that ***we can send large batches of data all at once to the graphics card***, and keep it there if there's enough memory left, without having to send data one vertex at a time. ***Sending data to the graphics card from the CPU is relatively slow, so wherever we can we try to send as much data as possible at once***. Once the data is in the graphics card's memory the vertex shader has almost instant access to the vertices making it extremely fast.
+- This buffer has a unique ID corresponding to that buffer, so we can generate one with a ***buffer ID using the glGenBuffers function*** 
+```c 
+unsigned int VBO;
+glGenBuffers(1, &VBO);  
+```
+- OpenGL has many types of buffer objects and the buffer type of a vertex buffer object is GL_ARRAY_BUFFER. 
+```c 
+glBindBuffer(GL_ARRAY_BUFFER, VBO);  
+```
+- Call to the glBufferData function that copies the previously defined vertex data into the buffer's memory
+```c 
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+```
+- The fourth parameter specifies
+    - **GL_STREAM_DRAW**: the data is set only once and used by the GPU at most a few times.
+    - **GL_STATIC_DRAW**: the data is set only once and used many times.
+    - **GL_DYNAMIC_DRAW**: the data is changed a lot and used many times.
+
+- As of now we stored the vertex data within memory on the graphics card as managed by a vertex buffer object named VBO.
+
+
+# Vertex shader
+We need to do is write the vertex shader in the shader language GLSL (OpenGL Shading Language) and then compile this shader so we can use it in our application.
+
+``` c
+#version 330 core
+layout (location = 0) in vec3 aPos;
+
+void main()
+{
+    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
+}
+```
+Next we declare all the input vertex attributes in the vertex shader with the in keyword. 
+We also specifically set the location of the input variable via layout (location = 0)
+
+To set ***the output of the vertex shader we have to assign the position data to the predefined gl_Position variable*** which is a vec4 behind the scenes
+
+## Compiling a shader
+``` c
+const char *vertexShaderSource = "#version 330 core\n"
+    "layout (location = 0) in vec3 aPos;\n"
+    "void main()\n"
+    "{\n"
+    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "}\0";
+```
+
+In order for OpenGL to use the shader it has to dynamically compile it at run-time from its source code. The first thing we need to do is ***create a shader object, again referenced by an ID. So we store the vertex shader as an unsigned int and create the shader with glCreateShader***: 
+``` c
+unsigned int vertexShader;
+vertexShader = glCreateShader(GL_VERTEX_SHADER);
+```
+Next we attach the shader source code to the shader object and compile the shader:
+``` c
+
+glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+glCompileShader(vertexShader);
+```
+
+# Fragment shader
+The fragment shader is all about calculating the color output of your pixels. 
+> Colors in computer graphics are represented as an array of 4 values: the red, green, blue and alpha (opacity) component, commonly abbreviated to RGBA. When defining a color in OpenGL or GLSL we set the strength of each component to a value between 0.0 and 1.0
+
+``` c
+#version 330 core
+out vec4 FragColor;
+
+void main()
+{
+    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+} 
+
+```
+The fragment shader only requires one output variable and that is a vector of size 4 that defines the final color output that we should calculate ourselves.
+
+The process for compiling a fragment shader is similar to the vertex shader, although this time we use the GL_FRAGMENT_SHADER constant as the shader type: 
+
+## Shader program
+A shader program object is the final linked version of multiple shaders combined. To use the recently compiled shaders we have to link them to a shader program object and then activate this shader program when rendering objects.
+``` c
+unsigned int shaderProgram;
+shaderProgram = glCreateProgram();
+
+glAttachShader(shaderProgram, vertexShader);
+glAttachShader(shaderProgram, fragmentShader);
+glLinkProgram(shaderProgram);
+```
+The result is a program object that we can activate by calling glUseProgram with the newly created program object as its argument: 
+``` c
+glUseProgram(shaderProgram);
+```
+
+Don't forget to delete the shader objects once we've linked them into the program object; we no longer need them anymore: 
+``` c
+glDeleteShader(vertexShader);
+glDeleteShader(fragmentShader);  
+```
+
+Right now we sent the input vertex data to the GPU and instructed the GPU how it should process the vertex data within a vertex and fragment shader
+
+# Linking Vertex Attributes
+![alt text](../Image/image-2.png)
+
+- The position data is stored as 32-bit (4 byte) floating point values.
+- Each position is composed of 3 of those values.
+- There is no space (or other values) between each set of 3 values. The values are tightly packed in the array.
+- The first value in the data is at the beginning of the buffer.
+
+``` c
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);  
+```
+- The first parameter specifies which vertex attribute we want to configure. Remember that we specified the location of the position vertex attribute in the vertex shader with layout (location = 0). 
+- The next argument specifies the size of the vertex attribute. The vertex attribute is a vec3 so it is composed of 3 values.
+- The third argument specifies the type of the data which is GL_FLOAT (a vec* in GLSL consists of floating point values).
+- The next argument specifies if we want the data to be normalized. If we're inputting integer data types (int, byte) and we've set this to GL_TRUE, the integer data is normalized to 0 (or -1 for signed data) and 1 when converted to float. This is not relevant for us so we'll leave this at GL_FALSE.
+- The fifth argument is known as the stride and tells us the space between consecutive vertex attributes. 
+- The last parameter is of type void* and thus requires that weird cast. This is the offset of where the position data begins in the buffer.
+
+## Vertex Array Object
+A vertex array object (also known as VAO) can be bound just like a vertex buffer object and any subsequent vertex attribute calls from that point on will be stored inside the VAO.
+
+This has the advantage that when configuring vertex attribute pointers you only have to make those calls once and whenever we want to draw the object, we can just bind the corresponding VAO.
+
+> Core OpenGL requires that we use a VAO so it knows what to do with our vertex inputs. If we fail to bind a VAO, OpenGL will most likely refuse to draw anything. 
+
+![alt text](../Image/image-3.png)
+
+``` c
+// 1. bind Vertex Array Object
+glBindVertexArray(VAO);
+// 2. copy our vertices array in a buffer for OpenGL to use
+glBindBuffer(GL_ARRAY_BUFFER, VBO);
+glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+// 3. then set our vertex attributes pointers
+glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+glEnableVertexAttribArray(0);  
+
+  
+[...]
+
+// ..:: Drawing code (in render loop) :: ..
+// 4. draw the object
+glUseProgram(shaderProgram);
+glBindVertexArray(VAO);
+someOpenGLFunctionThatDrawsOurTriangle(); 
+```
+
+A VAO that stores our vertex attribute configuration and which VBO to use. Usually when you have multiple objects you want to draw, you first generate/configure all the VAOs (and thus the required VBO and attribute pointers) and store those for later use
+
+#  Element Buffer Objects
+```c
+float vertices[] = {
+    // first triangle 
+     0.5f,  0.5f, 0.0f,   // top right
+     0.5f, -0.5f, 0.0f    // bottom right
+    -0.5f,  0.5f, 0.0f,   // top left
+    // second triangle
+     0.5f, -0.5f, 0.0f,   // bottom right
+    -0.5f, -0.5f, 0.0f,   // bottom left
+    -0.5f,  0.5f, 0.0f    // top left
+};
+```
+
+There is some overlap on the vertices specified. We specify bottom right and top left twice! This is an overhead of 50% since the same rectangle could also be specified with only 4 vertices, instead of 6. 
+
+An EBO is a buffer, just like a vertex buffer object, that stores indices that OpenGL uses to decide what vertices to draw.This so called indexed drawing is exactly the solution to our problem
+
+``` c
+float vertices[] = {
+     0.5f,  0.5f, 0.0f,   // Top right
+     0.5f, -0.5f, 0.0f,   // Bottom right
+    -0.5f, -0.5f, 0.0f,   // Bottom left
+    -0.5f,  0.5f, 0.0f    // Top left
+};
+
+unsigned int indices[] {
+    0, 1,  3,   // First triangle
+    1, 2,  3    // Second triangle
+};
+```
+Only need 4 vertices instead of 6. Next we need to create the element buffer object: 
+
+``` c
+unsigned in EBO;
+glGenBuffers(1, &EBO);
+glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+```
+ - The second argument is the count or number of elements we'd like to draw. We specified 6 indices so we want to draw 6 vertices in total. 
+ - The third argument is the type of the indices which is of type GL_UNSIGNED_INT.
+ - The last argument allows us to specify an offset in the EBO (or pass in an index array, but that is when you're not using element buffer objects), but we're just going to leave this at 0. 
+
+ - The glDrawElements function takes its indices from the EBO currently bound to the GL_ELEMENT_ARRAY_BUFFER target. It just so happens that a vertex array object also keeps track of element buffer object bindings. The last element buffer object that gets bound while a VAO is bound, is stored as the VAO's element buffer object. Binding to a VAO then also automatically binds that EBO. 
+![alt text](Image/image-4.png)
+
+> A VAO stores the glBindBuffer calls when the target is GL_ELEMENT_ARRAY_BUFFER. This also means it stores its unbind calls so make sure you don't unbind the element array buffer before unbinding your VAO, otherwise it doesn't have an EBO configured.
+
+![alt text](../Image/image-5.png)
+![alt text](../Image/image-6.png)
+
+
+# Shaders
+
+## GLSL
+```c
+# Version version_number
+in type in_variable_name;
+in type in_variable_name;
+
+out type out_variable_name;
+
+uniform type uniform_name;
+
+void main() 
+{
+    // Process inputs
+
+    // Output processed stuff to output variable
+    out_variable_name = processed;
+}
+```
+
+The vertex shader each input variable is also known as a vertex attribute. 
+OpenGL guarantees there are always at least 16 4-component vertex attributes available, but some hardware may allow for more which you can retrieve by querying **GL_MAX_VERTEX_ATTRIBS**: 
+```c++
+int nrAttributes;
+glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &nrAttributes);
+sts::cout << "Maximun nr of vertex attributes supported: " << nrAttributes << std::endl;
+```
+This often returns the minimum of **16** which should be more than enough for most purposes. 
+
+## Types
+GLSL also features two container types that we'll be using a lot, namely **vectors** and **matrices**. 
+
+### Vectors
+- vecn: the default vector of n floats.
+- bvecn: a vector of n booleans.
+- ivecn: a vector of n integers.
+- uvecn: a vector of n unsigned integers.
+- dvecn: a vector of n double components.
+
+GLSL also allows you to use **rgba** for colors or **stpq** for texture coordinates, accessing the same components. 
+
+The vector datatype allows for some interesting and flexible component selection called **swizzling**
+``` c
+vec2 someVec;
+vec4 differentVec = somVec.xyxx;
+vec2 vect = vec2(0.5, 0.7);
+vec4 = vec4(vect, 0.0, 0.0);
+```
+
+### Ins and Outs
+Each shader can specify inputs and outputs using those keywords and wherever an output variable matches with an input variable of the next shader stage they're passed along. The vertex and fragment shader differ a bit though. 
+
+The ***vertex shader differs in its input, in that it receives its input straight from the vertex data***. 
+
+To define how the vertex data is organized we specify the input variables with location metadata so we can configure the vertex attributes on the CPU.
+ > It is also possible to omit the layout (location = 0) specifier and query for the attribute locations in your OpenGL code via glGetAttribLocation
+
+
+The other exception is that the ***fragment shader requires a vec4 color output variable***, since the fragment shaders needs to generate a final output color.
+
+So if we want to send data from one shader to the other we'd have to declare an output in the sending shader and a similar input in the receiving shader. ***When the types and the names are equal on both sides OpenGL will link those variables together and then it is possible to send data between shaders*** (this is done when linking a program object). 
+
+Vertex shader: 
+``` c
+#version 330 core
+layout (location = 0) in vec3 aPos; // the position variable has attribute position 0
+  
+out vec4 vertexColor; // specify a color output to the fragment shader
+
+void main()
+{
+    gl_Position = vec4(aPos, 1.0); // see how we directly give a vec3 to vec4's constructor
+    vertexColor = vec4(0.5, 0.0, 0.0, 1.0); // set the output variable to a dark-red color
+}
+```
+
+Fragment shader:
+``` c
+#version 330 core
+out vec4 FragColor;
+  
+in vec4 vertexColor; // the input variable from the vertex shader (same name and same type)  
+
+void main()
+{
+    FragColor = vertexColor;
+} 
+```
+
+### Uniforms
+***Uniforms are another way to pass data from our application on the CPU to the shaders on the GPU***. Uniforms are however slightly different compared to vertex attributes
+
+ - **Uniforms are global**. Global, meaning that a uniform variable is unique per shader program object, and can be accessed from any shader at any stage in the shader program.
+ - Second, whatever you set the uniform value to, uniforms will keep their values until they're either reset or updated. 
+
+``` c
+#version 330 core
+out vec4 FragColor;
+  
+uniform vec4 ourColor; // we set this variable in the OpenGL code.
+
+void main()
+{
+    FragColor = ourColor;
+}   
+
+```
+
+``` c
+float timeValue = glfwGetTimer();
+float greenValue = (sin(timeValue)/2.0f) + 0.5f
+int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
+glUseProgram(shaderProgram);
+glUniform4f(vertexColorLocatio, 0.0f, greenValue, 0.0f, 1.0f);
+```
+
+- Then we query for the location of the ourColor uniform using **glGetUniformLocation**. We supply the shader program and the name of the uniform (that we want to retrieve the location from) to the query function. 
+- The uniform value using the **glUniform4f** function. Note that finding the uniform location does not require you to use the shader program first, but updating a uniform does require you to first use the program (by calling glUseProgram), because it sets the uniform on the currently active shader program. 
+    - f: the function expects a float as its value.
+    - i: the function expects an int as its value.
+    - ui: the function expects an unsigned int as its value.
+    - 3f: the function expects 3 floats as its value.
+    - fv: the function expects a float vector/array as its value.
+
+![alt text](../Image/fragment-interpolation.png)
