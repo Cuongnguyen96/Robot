@@ -1368,3 +1368,426 @@ FragColor = vec4(result, 1.0);
 ```
 
 ![alt text](Image/result_specular_lighting.png)
+
+# Materials
+- In the real world, each object has a different reaction to light. 
+- Steel objects are often shinier than a clay vase 
+- Some objects reflect the light without much scattering resulting in small specular highlights and others scatter a lot giving the highlight a larger radius.
+- If we want to simulate several types of objects in OpenGL we have to define material properties specific to each surface. 
+- When describing a surface we can define a material color for each of the 3 lighting components: ambient, diffuse and specular lighting
+
+``` c
+#vesrion 330 core
+struct Meterial  {
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    float shininess;
+};
+
+uniform Material material;
+```
+- A table as found at [devernay.free.fr](http://devernay.free.fr/cours/opengl/materials.html) shows a list of material properties that simulate real materials found in the outside world. 
+
+## Setting materials
+
+``` c
+void main() 
+{
+    // abmient 
+    vec3 ambient = lightColor * material.ambient;
+
+    // diffuse 
+    vec3 norm     = normalize(Normal);;
+    vec3 lightDir = normalize(lightPos - FragPos);
+    float diff    = max(dot(norm, lightDir), 0.0);
+    vec3 diffuse  = lightColor * (diff * material.diffuse);
+
+    // specular
+    vec3 viewDir     = normalize(viewPos - FragPos);
+    vec3 reflectDir  = reflect(-lightDir, norm);
+    float spec       = pow(max(dot(viewDir, reflectDir), 0.0), material.shiniess);
+    vec3 specular    = lightColor * (spec * material.specular);
+
+    vec3 result = ambient + diffuse + specular;
+    FagColor = vec4(result, 1.0);
+}
+```
+
+Fill the struct we will have to set the individual uniforms
+``` c
+lightingShader.setVec3("material.ambient", 1.0f, 0.5f, 0.31f);
+lightingShader.setVec3("material.diffuse", 1.0f, 0.5f, 0.31f);
+lightingShader.setVec3("material.specular", 0.5f, 0.5f, 0.5f);
+lightingShader.setFloat("material.shininess", 32.0f);
+```
+
+## Light properties
+The object is way too bright. The reason for the object being too bright is that the ambient, diffuse and specular colors are reflected with full force from any light source. 
+
+Light sources also have different intensities for their ambient, diffuse and specular components respectively. 
+
+If we'd visualize lightColor as vec3(1.0) the code would look like this: 
+
+``` c
+vec3 ambient  = vec3(1.0) * material.ambient;
+vec3 diffuse  = vec3(1.0) * (diff * matreial.diffuse);
+vec3 specular = vec3(1.0) * (spec * material.specular);
+```
+
+These vec3(1.0) values can be influenced individually as well for each light source and this is usually what we want. 
+
+Right now the ambient component of the object is fully influencing the color of the cube. The ambient component shouldn't really have such a big impact on the final color so we can restrict the ambient color by setting the light's ambient intensity to a lower value: 
+
+``` c
+vec3 ambient = vec3(0.1) * material.ambient;  
+```
+
+We can influence the diffuse and specular intensity of the light source in the same way. 
+
+``` c
+struct Light {
+    vec3 position;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};
+
+uniform Light light;
+```
+
+The diffuse component of a light source is usually set to the exact color we'd like a light to have; often a bright white color. ***The specular component is usually kept at vec3(1.0) shining at full intensity***. Note that we also added the light's position vector to the struct. 
+
+``` c
+vec3 ambient  = light.ambient * material.ambient;
+vec3 diffuse  = light.diffuse * (diff * material.diffuse);
+vec3 specular = light.specular * (spec * material.specular);  
+```
+
+Set the light intensities in the application: 
+```c
+lightingShader.setVec3("light.ambient",  0.2f, 0.2f, 0.2f);
+lightingShader.setVec3("light.diffuse",  0.5f, 0.5f, 0.5f); // darken diffuse light a bit
+lightingShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f); 
+```
+
+
+# Lighting maps
+
+## Diffuse maps
+***What we want is some way to set the diffuse colors of an object for each individual fragment***. Some sort of system where we can retrieve a color value based on the fragment's position on the object? 
+
+Using an image wrapped around an object that we can index for unique color values per fragment. ***In lit scenes this is usually called a diffuse map*** (this is generally how 3D artists call them before PBR) since a texture image represents all of the object's diffuse colors. 
+
+This time however we store the texture as a sampler2D inside the Material struct. We replace the earlier defined vec3 diffuse color vector with the diffuse map. 
+
+> Keep in mind that sampler2D is a so called opaque type which means we ***can't instantiate these types, but only define them as uniforms***. If the struct would be instantiated other than as a uniform (like a function parameter) GLSL could throw strange errors; the same thus applies to any struct holding such opaque types. 
+
+We also ***remove the ambient material color vector since the ambient color is equal to the diffuse color*** anyways now that we control ambient with the light. So there's no need to store it separately: 
+
+``` c
+struct Material {
+    sampler2D diffuse;
+    vec3      specular;
+    float     shininess;
+}; 
+...
+in vec2 TexCoords;
+
+```
+> If you're a bit stubborn and still want to set the ambient colors to a different value (other than the diffuse value) you can keep the ambient vec3, but then the ambient colors would still remain the same for the entire object. To get different ambient values for each fragment you'd have to use another texture for ambient values alone. 
+
+Note that we are going to need texture coordinates again in the fragment shader, so we declared an extra input variable. Then we simply sample from the texture to retrieve the fragment's diffuse color value: 
+
+``` c
+vec3 diffuse = light.diffuse * diff * vec3(texture(material.diffuse, TexCoords));
+```
+
+Also, don't forget to set the ambient material's color equal to the diffuse material's color as well: 
+
+``` c
+vec3 ambient = light.ambient * vec3(texture(material.diffuse, TexCoords));
+```
+
+The updated vertex data
+``` c
+    float vertices[] = {
+        // positions          // normals           // texture coords
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
+        ...
+    };
+```
+
+Update the vertex shader 
+
+```c
+
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoords;
+...
+out vec2 TexCoords;
+
+void main()
+{
+    ...
+    TexCoords = aTexCoords;
+}  
+```
+
+Update the vertex attribute pointers of both VAOs 
+
+``` c
+lightingShader.setInt("material.diffuse", 0);
+...
+glActiveTexture(GL_TEXTURE0);
+glBindTexture(GL_TEXTURE_2D, diffuseMap);
+```
+
+## Specular maps
+You probably noticed that the specular highlight looks a bit odd since the object is a container that mostly consists of wood and wood doesn't have specular highlights like that.
+
+We can fix this by setting the specular material of the object to vec3(0.0) but that would mean that the steel borders of the container would stop showing specular highlights as well and steel should show specular highlights.
+
+We would like to control what parts of the object should show a specular highlight with varying intensity. 
+
+We can also use a texture map just for specular highlights. This means we need to generate a black and white (or colors if you feel like it) texture that defines the specular intensities of each part of the object. 
+![alt text](Image/container2_specular.png)
+
+The intensity of the specular highlight comes from the brightness of each pixel in the image. Each pixel of the specular map can be displayed as a color vector where black represents the color vector vec3(0.0) and gray the color vector vec3(0.5)
+
+Because the container mostly consists of wood, and wood as a material should have no specular highlights, the entire wooden section of the diffuse texture was converted to black: black sections do not have any specular highlight. The steel border of the container has varying specular intensities with the steel itself being relatively susceptible to specular highlights while the cracks are not. 
+
+### Sampling specular maps
+Texture sampler in the same fragment shader we have to use a different texture unit for the specular map so let's bind it to the appropriate texture unit before rendering: 
+
+``` c
+lightingShader.setInt("material.specular", 1);
+...
+glActiveTexture(GL_TEXTURE1);
+glBindTexture(GL_TEXTURE_2D, specularMap);  
+
+```
+Then update the material properties of the fragment shader to accept a sampler2D as its specular component instead of a vec3: 
+
+``` c
+struct Material {
+    sampler2D diffuse;
+    sampler2D specular;
+    float     shininess;
+}; 
+```
+
+And lastly we want to sample the specular map to retrieve the fragment's corresponding specular intensity: 
+
+``` c
+vec3 ambient  = light.ambient  * vec3(texture(material.diffuse, TexCoords));
+vec3 diffuse  = light.diffuse  * diff * vec3(texture(material.diffuse, TexCoords));  
+vec3 specular = light.specular * spec * vec3(texture(material.specular, TexCoords));
+FragColor = vec4(ambient + diffuse + specular, 1.0);  
+```
+![alt text](Image/Specular_maps.png)
+
+
+# Light casters
+
+A light source that casts light upon objects is called a light caster. 
+
+## Directional Light
+When a light source is far away the light rays coming from the light source are close to parallel to each other. It looks like all the light rays are coming from the same direction, regardless of where the object and/or the viewer is. When a light source is modeled to be infinitely far away it is called a directional light since all its light rays have the same direction; it is independent of the location of the light source. 
+
+![alt text](Image/Directional_Light.png)
+
+We can model such a directional light by defining a light direction vector instead of a position vector. The shader calculations remain mostly the same except this time we directly use the light's direction vector instead of calculating the lightDir vector using the light's position vector: 
+``` c
+struct Light {
+    // vec3 position; // no longer necessary when using directional lights.
+    vec3 direction;
+  
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};
+[...]
+void main()
+{
+  vec3 lightDir = normalize(-light.direction);
+  [...]
+}
+```
+Negate the light.direction vector. The lighting calculations we used so far expect the light direction to be a direction from the fragment towards the light source. *** it's now a direction vector pointing towards the light source.***
+
+The resulting lightDir vector is then used as before in the diffuse and specular computations. 
+
+
+The light source 
+``` c
+lightingShader.setVec3("light.direction", -0.2f, -1.0f, -0.3f); 	
+```
+
+>  Direction vectors can then be represented as: vec4(-0.2f, -1.0f, -0.3f, 0.0f). This can also function as an easy check for light types: you could check if the w component is equal to 1.0 to see that we now have a light's position vector and if w is equal to 0.0 we have a light's direction vector; so adjust the calculations based on that:
+```c
+if(lightVector.w == 0.0) // note: be careful for floating point errors
+  // do directional light calculations
+else if(lightVector.w == 1.0)
+  // do light calculations using the light's position (as in previous chapters)  
+
+```
+![alt text](Image/Directional_Light_Result.png)
+
+
+## Point lights
+Directional lights are great for global lights that illuminate the entire scene, but we usually also want several point lights scattered throughout the scene. A point light is a light source with a given position somewhere in a world that illuminates in all directions, where the light rays fade out over distance. Think of light bulbs and torches as light casters that act as a point light. 
+
+![alt text](Image/Point_lights.png)
+
+### Attenuation
+
+To reduce the intensity of light over the distance a light ray travels is generally called attenuation. 
+
+$$F_{att} = \frac{1.0}{K_c + K_l * d + K_q * d^2}$$
+
+- $d$ represents the distance from the fragment to the light source.
+- $K_c$: constant  
+- $K_l$: linear 
+- $K_q$: quadratic
+
+![alt text](Image/Attenuation.png)
+
+#### Choosing the right values
+These values are good starting points for most lights, with courtesy of [Ogre3D's wiki](www.ogre3d.org/tikiwiki/tiki-index.php?page=-Point+Light+Attenuation): 
+
+### Implementing attenuation
+```c
+struct Light {
+    vec3 position;  
+  
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+	
+    float constant;
+    float linear;
+    float quadratic;
+}; 
+```
+
+The light to cover a distance of 50 
+
+``` c
+lightingShader.setFloat("light.constant",  1.0f);
+lightingShader.setFloat("light.linear",    0.09f);
+lightingShader.setFloat("light.quadratic", 0.032f);	    
+
+```
+
+Implementing attenuation in the fragment shader is relatively straightforward: we simply calculate an attenuation value based on the equation and multiply this with the ambient, diffuse and specular components
+
+We do need the distance to the light source for the equation to work though. 
+
+``` c
+float distance    = length(light.position - FragPos);
+float attenuation = 1.0 / (light.constant + light.linear * distance + 
+    		    light.quadratic * (distance * distance))
+```
+
+``` c
+ambient  *= attenuation; 
+diffuse  *= attenuation;
+specular *= attenuation;   
+```
+
+![alt text](build/Image/Point_lights_Result.png)
+
+
+## Spotlight
+A spotlight is a light source that is located somewhere in the environment that, instead of shooting light rays in all directions, only shoots them in a specific direction. The result is that only the objects within a certain radius of the spotlight's direction are lit and everything else stays dark.
+![alt text](build/Image/Spotlight.png)
+
+- LightDir: the vector pointing from the fragment to the light source.
+- SpotDir: the direction the spotlight is aiming at.
+- Phi $\phi$: the cutoff angle that specifies the spotlight's radius. Everything outside this angle is not lit by the spotlight.
+- Theta $\theta$: the angle between the LightDir vector and the SpotDir vector. The θ value should be smaller than Φ to be inside the spotlight.  $\phi$ ($\theta < \phi$).
+
+### Flashlight
+A flashlight is a spotlight located at the viewer's position and usually aimed straight ahead from the player's perspective. A flashlight is basically a normal spotlight, but with its position and direction continually updated based on the player's position and orientation. 
+
+``` c
+struct Light {
+    vec3  position;
+    vec3  direction;
+    float cutOff;
+    ...
+};    
+
+```
+
+Next we pass the appropriate values to the shader: 
+
+``` c
+
+lightingShader.setVec3("light.position",  camera.Position);
+lightingShader.setVec3("light.direction", camera.Front);
+lightingShader.setFloat("light.cutOff",   glm::cos(glm::radians(12.5f)));
+```
+
+As you can see we're not setting an angle for the cutoff value but calculate the cosine value based on an angle and pass the cosine result to the fragment shader. 
+
+The reason for this is that in the fragment shader we're calculating ***the dot product between the LightDir and the SpotDir vector and the dot product returns a cosine value and not an angle***; and we can't directly compare an angle with a cosine value. 
+
+To get the angle in the shader we then have to calculate the inverse cosine of the dot product's result which is an ***expensive operation.***
+
+Now what's left to do is calculate the theta θ value and compare this with the cutoff ϕ value to determine if we're in or outside the spotlight: 
+
+``` c
+float theta = dot(lightDir, normalize(-light.direction));
+    
+if(theta > light.cutOff) 
+{       
+  // do lighting calculations
+}
+else  // else, use ambient light so scene isn't completely dark outside the spotlight.
+  color = vec4(light.ambient * vec3(texture(material.diffuse, TexCoords)), 1.0);
+
+```
+> That is right, but don't forget angle values are represented as cosine values and an angle of 0 degrees is represented as the cosine value of 1.0 while an angle of 90 degrees is represented as the cosine value of 0.0 as you can see here:
+![alt text](build/Image/cosx.png)
+
+
+
+![alt text](build/Image/Spotlight_result.png)
+
+
+### Smooth/Soft edges
+
+To create the effect of a smoothly-edged spotlight we want to simulate a spotlight having an inner and an outer cone. We can set the inner cone as the cone defined in the previous section, but we also want an outer cone that gradually dims the light from the inner to the edges of the outer cone. 
+
+To create an outer cone we simply define another cosine value that represents the angle between the spotlight's direction vector and the outer cone's vector (equal to its radius)
+
+Then, if a fragment is between the inner and the outer cone it should calculate an intensity value between 0.0 and 1.0. If the fragment is inside the inner cone its intensity is equal to 1.0 and 0.0 if the fragment is outside the outer cone. 
+
+We can calculate such a value using the following equation: 
+
+$$I = \frac{\theta - \gamma}{\epsilon}$$
+
+- $\theta$ (Theta)
+- $\phi$ (Phi)  Inner Cutoff
+- $\gamma$ (Gamma) Outer Cutoff
+- $\epsilon$ (Epsilon): is the cosine difference between the inner $\phi$ and the outer cone $\gamma$ ($\epsilon = \phi - \gamma$). 
+- The resulting $I$ value is then the intensity of the spotlight at the current fragment. 
+
+
+``` c
+float theta     = dot(lightDir, normalize(-light.direction));
+float epsilon   = light.cutOff - light.outerCutOff;
+float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);    
+...
+// we'll leave ambient unaffected so we always have a little light.
+diffuse  *= intensity;
+specular *= intensity;
+...
+````
+Note that we use the clamp function that clamps its first argument between the values 0.0 and 1.0. This makes sure the intensity values won't end up outside the [0, 1] range.
+
+![alt text](build/Image/Soft_edges.png)

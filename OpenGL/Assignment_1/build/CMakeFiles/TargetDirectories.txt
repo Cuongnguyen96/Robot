@@ -1,3 +1,0 @@
-/home/nmc/WorkSpace/Program/Robot/OpenGL/Assignment_1/build/CMakeFiles/rebuild_cache.dir
-/home/nmc/WorkSpace/Program/Robot/OpenGL/Assignment_1/build/CMakeFiles/edit_cache.dir
-/home/nmc/WorkSpace/Program/Robot/OpenGL/Assignment_1/build/CMakeFiles/opengl_app.dir
