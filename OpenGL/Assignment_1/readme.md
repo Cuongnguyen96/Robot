@@ -1790,4 +1790,147 @@ specular *= intensity;
 ````
 Note that we use the clamp function that clamps its first argument between the values 0.0 and 1.0. This makes sure the intensity values won't end up outside the [0, 1] range.
 
+
 ![alt text](build/Image/Soft_edges.png)
+
+
+
+# Multiple lights
+
+To use more than one light source in the scene we want to encapsulate the lighting calculations into GLSL functions. The reason for that is that the code quickly gets nasty when we do lighting computations with multiple light types, each requiring different computations.
+
+When using multiple lights in a scene the approach is usually as follows: 
+- we have a single color vector that represents the fragment's output color. 
+- For each light, the light's contribution to the fragment is added to this output color vector.
+- So each light in the scene will calculate its individual impact and contribute that to the final output color.
+
+```c
+out vec4 FragColor;
+  
+void main()
+{
+  // define an output color value
+  vec3 output = vec3(0.0);
+  // add the directional light's contribution to the output
+  output += someFunctionToCalculateDirectionalLight();
+  // do the same for all point lights
+  for(int i = 0; i < nr_of_point_lights; i++)
+  	output += someFunctionToCalculatePointLight();
+  // and add others lights as well (like spotlights)
+  output += someFunctionToCalculateSpotLight();
+  
+  FragColor = vec4(output, 1.0);
+}  
+```
+
+## Directional light
+First we need to set the required variables that we minimally need for a directional light source. We can store the variables in a struct called DirLight and define it as a uniform. 
+
+``` c
+struct DirLight {
+    vec3 direction;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};  
+uniform DirLight dirLight;
+```
+
+We can then pass the dirLight uniform to a function with the following prototype: 
+``` c
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir);
+
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)
+{
+    vec3 lightDir = normalize(-light.direction);
+    // diffuse shading
+    float diff = max(dot(normal, lightDir), 0.0);
+    // specular shading
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    // combine results
+    vec3 ambient  = light.ambient  * vec3(texture(material.diffuse, TexCoords));
+    vec3 diffuse  = light.diffuse  * diff * vec3(texture(material.diffuse, TexCoords));
+    vec3 specular = light.specular * spec * vec3(texture(material.specular, TexCoords));
+    return (ambient + diffuse + specular);
+}  
+```
+
+### Point light
+``` c
+struct PointLight {    
+    vec3 position;
+    
+    float constant;
+    float linear;
+    float quadratic;  
+
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};  
+#define NR_POINT_LIGHTS 4  
+uniform PointLight pointLights[NR_POINT_LIGHTS];
+
+vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+
+vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
+{
+    vec3 lightDir = normalize(light.position - fragPos);
+    // diffuse shading
+    float diff = max(dot(normal, lightDir), 0.0);
+    // specular shading
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    // attenuation
+    float distance    = length(light.position - fragPos);
+    float attenuation = 1.0 / (light.constant + light.linear * distance + 
+  			     light.quadratic * (distance * distance));    
+    // combine results
+    vec3 ambient  = light.ambient  * vec3(texture(material.diffuse, TexCoords));
+    vec3 diffuse  = light.diffuse  * diff * vec3(texture(material.diffuse, TexCoords));
+    vec3 specular = light.specular * spec * vec3(texture(material.specular, TexCoords));
+    ambient  *= attenuation;
+    diffuse  *= attenuation;
+    specular *= attenuation;
+    return (ambient + diffuse + specular);
+} 
+```
+
+### Putting it all together
+
+``` c
+void main()
+{
+    // properties
+    vec3 norm = normalize(Normal);
+    vec3 viewDir = normalize(viewPos - FragPos);
+
+    // phase 1: Directional lighting
+    vec3 result = CalcDirLight(dirLight, norm, viewDir);
+    // phase 2: Point lights
+    for(int i = 0; i < NR_POINT_LIGHTS; i++)
+        result += CalcPointLight(pointLights[i], norm, FragPos, viewDir);    
+    // phase 3: Spot light
+    //result += CalcSpotLight(spotLight, norm, FragPos, viewDir);    
+    
+    FragColor = vec4(result, 1.0);
+}
+```
+
+Setting the uniforms for the directional light struct 
+``` c
+lightingShader.setFloat("pointLights[0].constant", 1.0f);
+```
+position vector for each of the 4 point lights
+``` c
+glm::vec3 pointLightPositions[] = {
+	glm::vec3( 0.7f,  0.2f,  2.0f),
+	glm::vec3( 2.3f, -3.3f, -4.0f),
+	glm::vec3(-4.0f,  2.0f, -12.0f),
+	glm::vec3( 0.0f,  0.0f, -3.0f)
+};  
+```
+
+![alt text](Image/Multiple_lights.png)
+

@@ -19,7 +19,7 @@ set(SOURCES
     camera/camera.h
 )
 
-file(COPY ${CMAKE_SOURCE_DIR}/13_Multiple_lights DESTINATION ${CMAKE_BINARY_DIR})
+file(COPY ${CMAKE_SOURCE_DIR}/12_Light_casters DESTINATION ${CMAKE_BINARY_DIR})
 file(COPY ${CMAKE_SOURCE_DIR}/Image DESTINATION ${CMAKE_BINARY_DIR})
 
 add_executable(opengl_app ${SOURCES})
