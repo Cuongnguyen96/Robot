@@ -1934,3 +1934,54 @@ glm::vec3 pointLightPositions[] = {
 
 ![alt text](Image/Multiple_lights.png)
 
+
+
+# Assimp
+In bigger graphics applications, there are usually lots of complicated and interesting models that are much prettier to look at than a static container. However, unlike the container object, we can't really manually define all the vertices, normals, and texture coordinates of complicated shapes like houses, vehicles, or human-like characters. 
+
+What we want instead, is to import these models into the application; models that were carefully designed by 3D artists in tools like Blender, 3DS Max or Maya. 
+
+***These so called 3D modeling tools allow artists to create complicated shapes and apply textures to them via a process called uv-mapping***. The tools then automatically generate all the vertex coordinates, vertex normals, and texture coordinates while exporting them to a model file format we can use.
+
+It is our job to parse these exported model files and extract all the relevant information so we can store them in a format that OpenGL understands. A common issue is that there are dozens of different file formats where each exports the model data in its own unique way. Model formats like the [Wavefront.obj](https://en.wikipedia.org/wiki/Wavefront_.obj_file) only contains model data with minor material information like model colors and diffuse/specular maps, while model formats like the XML-based [Collada file format](https://en.wikipedia.org/wiki/COLLADA) are extremely extensive and contain models, lights, many types of materials, animation data, cameras, complete scene information, and much more. 
+
+## A model loading library
+
+[Assimp](https://assimp.org/) that stands for Open Asset Import Library. 
+
+Assimp is able to import dozens of different model file formats (and export to some as well) by loading all the model's data into Assimp's generalized data structures. Assimp is able to import dozens of different model file formats (and export to some as well) by loading all the model's data into Assimp's generalized data structures.
+
+When importing a model via Assimp it loads the entire model into a scene object that contains all the data of the imported model/scene. Assimp then has a collection of nodes where each node contains indices to data stored in the scene object where each node can have any number of children. A (simplistic) model of Assimp's structure is shown below: 
+
+![alt text](Image/Assimp.png)
+
+- All the data of the ***scene/model is contained in the Scene object like all the materials and the meshes***. It also contains a reference to the root node of the scene.
+- The ***Root node of the scene may contain children nodes (like all other nodes) and could have a set of indices that point to mesh data in the scene object's mMeshes array***. The scene's mMeshes array contains the actual Mesh objects, the values in the mMeshes array of a node are only indices for the scene's meshes array.
+- A ***Mesh object itself contains all the relevant data required for rendering, think of vertex positions, normal vectors, texture coordinates, faces, and the material of the object***.
+- A mesh contains several faces. ***A Face represents a render primitive of the object (triangles, squares, points). A face contains the indices of the vertices that form a primitive***. Because the vertices and the indices are separated, this makes it easy for us to render via an index buffer
+- Finally a mesh also links to a ***Material object that hosts several functions to retrieve the material properties of an object***. Think of colors and/or texture maps (like diffuse and specular maps).
+
+> Mesh
+> When modeling objects in modeling toolkits, artists generally do not create an entire model out of a single shape. Usually, each model has several sub-models/shapes that it consists of. Each of those single shapes is called a mesh. Think of a human-like character: artists usually model the head, limbs, clothes, and weapons all as separate components, and the combined result of all these meshes represents the final model. A single mesh is the minimal representation of what we need to draw an object in OpenGL (vertex data, indices, and material properties). A model (usually) consists of several meshes. 
+
+
+## Building Assimp
+
+[GitHub](https://github.com/assimp/assimp/blob/master/Build.md) page and choose the corresponding version. For this writing, the Assimp version used was version 3.1.1.
+
+```c
+sudo apt-get update
+sudo apt-get install libassimp-dev assimp-utils
+```
+
+``` c
+git clone https://github.com/assimp/assimp.git
+cd assimp
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+```
+
+
