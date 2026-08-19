@@ -217,7 +217,7 @@ color ray_color(const ray& r) {
 ## Ray-Sphere Intersection
 The equation for a sphere of radius r that is centered at the origin is an important mathematical equation: 
 $$
-x^2+y^2+z^2=r^2
+x^2 + y^2 + z^2 = r^2
 $$
 
 You can also think of this as saying that if a given point (x,y,z) is on the surface of the sphere.
@@ -227,22 +227,22 @@ You can also think of this as saying that if a given point (x,y,z) is on the sur
 
 Then the equation becomes a lot less nice: 
 $$
-(C_x−x)^2+(C_y−y)^2+(C_z−z)^2=r^2
+(C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2 = r^2
 $$
 
 In graphics, you almost always want your formulas to be in terms of vectors so that all the $x/y/z$ stuff can be simply represented using a vec3 class.
 
-You might note that the vector from point $P=(x,y,z)$ to center $C=(C_x,C_y,C_z)$ is $(C−P)$.
+You might note that the vector from point $P=(x,y,z)$ to center $C=(C_x,C_y,C_z)$ is $(C - P)$.
 
 If we use the definition of the dot product: 
 $$
-(C−P)⋅(C−P)=(C_x−x)^2+(C_y−y)^2+(C_z−z)^2
+(C - P) \cdot (C - P) = (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2
 $$
 
 Then we can rewrite the equation of the sphere in vector form as: 
 
 $$
-(C−P)⋅(C−P)=r^2
+(C - P) \cdot (C - P) = r^2
 $$
 
 We can read this as “*any point $P$ that satisfies this equation is on the sphere*”.
@@ -250,28 +250,27 @@ We can read this as “*any point $P$ that satisfies this equation is on the sph
 We want to know if our ray $P(t)=Q+td$ ever hits the sphere anywhere. If it does hit the sphere, there is some t for which $P(t)$ satisfies the sphere equation. So we are looking for any $t $ where this is true: 
 
 $$
-(C−P(t))⋅(C−P(t))=r^2
+(C - P(t)) \cdot (C - P(t)) = r^2
 $$
 
 which can be found by replacing P(t) with its expanded form: 
 
 $$
-(C−(Q+td))⋅(C−(Q+td))=r^2
+(C - (Q + td)) \cdot (C - (Q + td)) = r^2
 $$
 
 We have three vectors on the left dotted by three vectors on the right. If we solved for the full dot product we would get nine vectors.
 
 $$
-(−td+(C−Q))⋅(−td+(C−Q))=r^2 
-
+(-td + (C - Q)) \cdot (-td + (C - Q)) = r^2
 $$
 
 $$
-t^2d⋅d−2td⋅(C−Q)+(C−Q)⋅(C−Q)=r^2
+t^2 d \cdot d - 2td \cdot (C - Q) + (C - Q) \cdot (C - Q) = r^2
 $$
 
 $$
-t^2d⋅d−2td⋅(C−Q)+(C−Q)⋅(C−Q)−r2^=0
+t^2 d \cdot d - 2td \cdot (C - Q) + (C - Q) \cdot (C - Q) - r^2 = 0
 $$
 
 You can solve for a quadratic equation $ax^2+bx+c=0$ by using the quadratic formula:
@@ -282,13 +281,13 @@ $$
 
 So solving for $t$ in the ray-sphere intersection equation gives us these values for $a$, $b$, and $c$: 
 $$
-a=d⋅d
+a = d \cdot d
 $$
 $$
-b=−2d⋅(C−Q)
+b = -2d \cdot (C - Q)
 $$
 $$
-c=(C−Q)⋅(C−Q)−r^2
+c = (C - Q) \cdot (C - Q) - r^2
 $$
 
 ![alt text](Resource/Ray-sphere_intersection.png)
