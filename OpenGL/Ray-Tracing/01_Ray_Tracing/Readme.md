@@ -1,5 +1,5 @@
 
-# 2 Output an Image
+# Output an Image
 The catch is, there are so many formats. Many of those are complex. I always start with a plain text ppm file. 
 
 ## The PPM Image Format
@@ -336,7 +336,9 @@ For example, sphere normals can be made unit length simply by dividing by the sp
 ![alt text](Resource/Sphere-surface-normal.png)
 
 Imagine you are standing anywhere on Earth. The vector pointing from the center of the Earth through your feet and up to your head is the surface normal at your location. It is perpendicular to the ground.
-$$Outward Normal Direction = Hit Point - Sphere Center.$$
+$$
+	ext{Outward Normal Direction} = \text{Hit Point} - \text{Sphere Center}
+$$
 
 Since the renderer does not yet have lights or shadows, the author uses a clever trick to verify that the normal vectors are being calculated correctly: ***Mapping the vector values to colors.***
 - **The Problem**: The components $(x, y, z)$ of a normalized normal vector $\vec{n}$ range from $-1$ to $1$. However, colors in graphics (Red, Green, Blue) are typically represented in the range $[0, 1]$.
@@ -400,9 +402,11 @@ So solving for h:
 $$
 b=−2d⋅(C−Q)
 $$
+
 $$
 b=−2h
 $$
+
 $$
 h=\frac{b}{−2}=d⋅(C−Q)
 $$
@@ -931,13 +935,23 @@ For a single pixel composed of multiple samples, we'll select samples from the a
 
 First we'll update the **write_color()** function to account for the number of samples we use. we need to find the average across all of the samples that we take. To do this, we'll add the ***full color from each iteration, and then finish with a single division (by the number of samples) at the end***, before writing out the color. To ensure that the color components of the final result remain within the proper $[0,1]$ bounds, we'll add and use a small helper function: interval::clamp(x). 
 - Clamping Formula:
-$$Clamped(x) = \begin{cases} \text{min} & \text{if } x < \text{min} \\ \text{max} & \text{if } x > \text{max} \\ x & \text{otherwise} \end{cases}$$
+
+```math
+\operatorname{Clamped}(x) =
+\begin{cases}
+\mathrm{min} & \mathrm{if } x < \mathrm{min} \\
+\mathrm{max} & \mathrm{if } x > \mathrm{max} \\
+x & \mathrm{otherwise}
+\end{cases}
+```
 - Function defined in interval::clamp: Returns $x$ restricted to $[\text{min}, \text{max}]$.
 - Code segment in write_color: Uses interval $[0.000, 0.999]$ to safely map to byte $[0, 255]$ without integer overflow.
 
 The general formula for the averaged light $L(i,j)$ falling on a specific pixel at column $i$ and row $j$ is:
 
-$$L_{\text{averaged}}(i,j) \approx \frac{1}{N} \sum_{k=1}^{N} L_{\text{sample}}(k)$$
+$$
+L_{\text{averaged}}(i,j) \approx \frac{1}{N} \sum_{k=1}^{N} L_{\text{sample}}(k)
+$$
 
 interval.h
 ``` c
@@ -1118,10 +1132,12 @@ First, we will use a rejection method to generate the random vector inside the u
 If this point lies outside the unit sphere, then generate a new one until we find one that lies inside or on the unit sphere. 
 
 ![pre-normalization](Resource/pre-normalization.png)
-$$pre-normalization$$
+
+    \mathrm{pre-normalization}
 
 ![normalized](Resource/normalized.png)
-$$normalized$$
+
+    \mathrm{normalized}
 
 vec3.h
 
@@ -1290,7 +1306,9 @@ This distribution scatters reflected rays in a manner that is proportional to $c
 This means that a reflected ray is most likely to scatter in a direction near the surface normal, and less likely to scatter in directions away from the normal.
 
 **Lambert's Cosine Law**
-$$I(\phi) \propto \cos(\phi)$$
+$$
+I(\phi) \propto \cos(\phi)
+$$
 - At an angle $\phi = 0^\circ$ (pointing straight up), $\cos(0) = 1$. This has the highest probability.
 - At an angle $\phi = 90^\circ$ (horizontal/grazing angle), $\cos(90) = 0$. This has zero probability.
 
@@ -1305,10 +1323,23 @@ The point S is the geometric proof that $(n + r)$ actually creates the cosine di
 
 1. We have the intersection point $P$ and the surface normal $n$.
 2. We imagine a unit sphere (radius = 1) tangent to the surface at point P. Its center $C$ is displaced by 1 in the direction of $n$. Therefore, center $C = P + n$.
-3. We pick a random point $S$ on the surface of this imaginary sphere. We generate $S$ by generating a random unit vector $r$ and adding it to the sphere’s center $C$.$$S = C + r \Rightarrow S = (P + n) + r$$The final reflected ray goes from point P to point S.$$Vector Direction = (S - P)$$
+3. We pick a random point $S$ on the surface of this imaginary sphere. We generate $S$ by generating a random unit vector $r$ and adding it to the sphere's center $C$.
 
-$$Vector Direction = [(P + n) + r] - P = n + r$$
-$$Vector Direction = rec.normal + randomUnitVector()$$
+```math
+S = C + r \Rightarrow S = (P + n) + r
+```
+
+    The final reflected ray goes from point P to point S:
+
+```math
+\mathrm{Vector\ Direction} = (S - P)
+```
+```math
+\mathrm{Vector\ Direction} = [(P + n) + r] - P = n + r
+```
+```math
+\mathrm{Vector\ Direction} = \mathrm{rec.normal} + \mathrm{randomUnitVector}()
+```
 
 ![alt text](Resource/lambertian_reflection_proof.png)
 
@@ -1377,8 +1408,17 @@ This means that the 0 to 1 values have some transform applied before being store
 
 We need to transform our calculated Linear data into Gamma data before writing it to the image file.
 - Formulas: A common approximation is Gamma 2.
-    - Moving from Gamma Space (stored) $\to$ Linear Space (display): $$Brightness_{\text{linear}} = (Stored_{\text{gamma}})^2$$
-    - Moving from Linear Space (computed) $\to$ Gamma Space (storage): $$Stored_{\text{gamma}} = (Brightness_{\text{linear}})^{1/2}$$
+    - Moving from Gamma Space (stored) $\to$ Linear Space (display):
+
+```math
+Brightness_{\mathrm{linear}} = (Stored_{\mathrm{gamma}})^2
+```
+
+    - Moving from Linear Space (computed) $\to$ Gamma Space (storage):
+
+```math
+Stored_{\mathrm{gamma}} = (Brightness_{\mathrm{linear}})^{1/2}
+```
 
 
 color.h
@@ -1590,8 +1630,12 @@ For polished metals the ray won’t be randomly scattered. The key question is: 
 - which is given by the dot product $dot(v, n)$. (If n were not a unit vector, we would also need to divide this dot product by the length of $n$.)
 - Finally, because $v$ points into the surface, and we want $b$ to point out of the surface, we need to negate this projection length. $-dot(v, n)$
 
-$$b = -dot(v, n) \times n$$
-$$V_{reflect} = v -2 \times dot(v, n) \times n$$
+$$
+b = -\operatorname{dot}(v, n) \times n
+$$
+$$
+V_{\text{reflect}} = v - 2 \times \operatorname{dot}(v, n) \times n
+$$
 
 vec3.h
 ``` c
@@ -1760,71 +1804,113 @@ The hardest part to debug is the refracted ray. I usually first just have all th
 Is that right? Glass balls look odd in real life. But no, it isn’t right. The world should be flipped upside down and no weird black stuff. 
 
 ## Snell's Law
-The refraction is described by Snell’s law:
+The refraction is described by Snell's law:
 
-$$η⋅sinθ=η^′⋅sinθ^′$$
+$$
+\eta \cdot \sin\theta = \eta' \cdot \sin\theta'
+$$
 
-- Where $θ$ and $θ′$ are the angles from the normal
-- $η$ and $η′$ (pronounced “eta” and “eta prime”) are the refractive indices. The geometry is: 
+- Where $\theta$ and $\theta'$ are the angles from the normal.
+- $\eta$ and $\eta'$ (pronounced "eta" and "eta prime") are the refractive indices. The geometry is:
 ![alt text](Resource/Ray_refraction.png)
 
-In order to determine the direction of the refracted ray, we have to solve for $sinθ^′$: 
+In order to determine the direction of the refracted ray, we have to solve for $\sin\theta'$:
 
-$$sinθ^′=\frac{η}{η'}⋅sinθ$$
+$$
+\sin\theta' = \frac{\eta}{\eta'} \cdot \sin\theta
+$$
 
 On the refracted side of the surface there is a refracted ray $R'$ and a normal $n'$, and there exists an angle, $θ'$, between them. We can split $R'$ into the parts of the ray that are perpendicular to $n'$ and parallel to $n'$: 
 
-$$R' = R'_\perp + R'_\parallel$$
+$$
+R' = R'_{\perp} + R'_{\parallel}
+$$
 
 Dot Product:
-$$\cos\theta = -R \cdot n$$
-1. From the geometric definition of the dot product between two unit vectors $a$ and $b$: $a \cdot b = \vert{}a\vert{}\vert{}b\vert{}\cos(\text{angle between } a, b)$. Since lengths are 1, $a \cdot b = \cos(\text{angle between } a, b)$.
+$$
+\cos\theta = -R \cdot n
+$$
+1. From the geometric definition of the dot product between two unit vectors $a$ and $b$:
+
+    $a \cdot b = \left\lvert a \right\rvert \left\lvert b \right\rvert \cos(\text{angle between } a, b)$.
+
+    Since lengths are 1, $a \cdot b = \cos(\text{angle between } a, b)$.
 2. Analyze the angle of incidence $\theta$: It is defined as the angle between the normal vector $n$ (pointing outward) and the incident ray vector when flipped $-R$ (pointing outward).
-3. Apply the dot product formula to vectors $n$ and $-R$:$$n \cdot (-R) = \cos\theta$$
+3. Apply the dot product formula to vectors $n$ and $-R$:
+
+    $n \cdot (-R) = \cos\theta$.
 4. Using dot product properties: $n \cdot (-R) = -(n \cdot R) = -(R \cdot n)$.
 4. Therefore: $\cos\theta = -R \cdot n$.
 
-The Perpendicular Component Vector $R'_\perp$:
-1. Find Magnitude of $R'_\perp$:
-    - Consider the right triangle formed by vector $R'$ and its components. The component orthogonal to the normal has magnitude: $\vert{}R'_\perp\vert{} = \vert{}R'\vert{}\sin\theta'$. Since $\vert{}R'\vert{}=1$, $\vert{}R'_\perp\vert{} = \sin\theta'$.
-    - Apply Snell's Law ($η \sinθ = η' \sinθ'$) rewritten to isolate $\sin\theta'$:  $\sin\theta' = \frac{\eta}{\eta'} \sin\theta$.
-    - Substitute $r = \frac{\eta}{\eta'}$: Magnitude $\vert{}R'_\perp\vert{} = r \sin\theta$.
-2. Find Direction of $R'_\perp$:
+The Perpendicular Component Vector $R'_{\perp}$:
+
+1. Find Magnitude of $R'_{\perp}$:
+
+    - Consider the right triangle formed by vector $R'$ and its components. The component orthogonal to the normal has magnitude $\left\lvert R'_{\perp} \right\rvert = \left\lvert R' \right\rvert \sin\theta'$. Since $\left\lvert R' \right\rvert = 1$, $\left\lvert R'_{\perp} \right\rvert = \sin\theta'$.
+
+    - Apply Snell's law, $\eta \sin\theta = \eta' \sin\theta'$, rewritten to isolate $\sin\theta'$: $\sin\theta' = \frac{\eta}{\eta'} \sin\theta$.
+
+    - Substitute $r = \frac{\eta}{\eta'}$. The magnitude is $\left\lvert R'_{\perp} \right\rvert = r \sin\theta$.
+
+2. Find Direction of $R'_{\perp}$:
+
     - By the Law of Refraction, the incident ray, the surface normal, and the refracted ray lie in the same plane. Therefore, the "horizontal" or perpendicular direction of the refracted ray is the same as the perpendicular direction of the incident ray.
+
     - Let $R_\perp$ represent the vector of the perpendicular component of incoming ray $R$ relative to normal $n$.
+
 3. Find Vector $R_\perp$ (Perpendicular component of incident ray $R$):
+
     - We can orthogonally decompose incident ray $R$ along normal $n$: $R = R_{\perp\_normal} + R_{\parallel\_normal}$.
+
     - The component of $R$ parallel to outward normal $n$ is the projection of $R$ onto $n$: $R_{\parallel\_normal} = (R \cdot n)n$.
-    - Therefore, the vector component of $R$ perpendicular to normal $n$ (lying in the surface plane) is found by subtracting the parallel component from the total vector $R$. Let's call this vector $$R_{\perp\_normal} = R - R_{\parallel\_normal} = R - (R \cdot n)n$$
-    - Substitute the previous result $\cos\theta = -R \cdot n$:$$R_\perp = R - (-\cos\theta)n = R + \cos(\theta)n$$
-    (Note that physically, this vector points in the direction lying along the surface plane away from the intersection point, and its magnitude is $\vert{}R_\perp\vert{} = \vert{}R\vert{}\sin\theta = \sin\theta$).
-4. Assemble Vector $R'_\perp$:
-    - The required vector $R'_\perp$ is assembled by taking its known magnitude ($r \sin\theta$ from step 1) and multiplying it by the unit direction vector. $\vert{}R_\perp\vert{} = \vert{}R\vert{}\sin\theta = \sin\theta$ 
-    - The unit direction lying tangent to the surface derived from incident ray $R$ is $t = \frac{R_\perp}{\vert{}R_\perp\vert{}} = \frac{R_\perp}{\sin\theta}$.
 
-    $$R'_\perp = \vert{}R'_\perp\vert{} \cdot t$$
-    $$R'_\perp = (r \sin\theta) \cdot \frac{R_\perp}{\sin\theta}$$
-    $$R'_\perp = r R_\perp$$
+    - Therefore, the vector component of $R$ perpendicular to normal $n$ (lying in the surface plane) is found by subtracting the parallel component from the total vector $R$. In other words, $R_{\perp\_normal} = R - R_{\parallel\_normal} = R - (R \cdot n)n$.
+
+    - Substitute the previous result $\cos\theta = -R \cdot n$: $R_{\perp} = R - (-\cos\theta)n = R + \cos\theta n$.
+
+    (Note that physically, this vector points in the direction lying along the surface plane away from the intersection point, and its magnitude is $\left\lvert R_{\perp} \right\rvert = \left\lvert R \right\rvert \sin\theta = \sin\theta$).
+
+4. Assemble Vector $R'_{\perp}$:
+
+    - The required vector $R'_{\perp}$ is assembled by taking its known magnitude ($r \sin\theta$ from step 1) and multiplying it by the unit direction vector. $\left\lvert R_{\perp} \right\rvert = \left\lvert R \right\rvert \sin\theta = \sin\theta$.
+
+    - The unit direction lying tangent to the surface derived from incident ray $R$ is $t = \frac{R_{\perp}}{\left\lvert R_{\perp} \right\rvert} = \frac{R_{\perp}}{\sin\theta}$.
+
+```math
+R'_{\perp} = \left\lvert R'_{\perp} \right\rvert \cdot t
+```
+
+```math
+R'_{\perp} = (r \sin\theta) \cdot \frac{R_{\perp}}{\sin\theta}
+```
+
+Therefore,
+
+```math
+R'_{\perp} = r R_{\perp}
+```
 
 
-$$R'_\perp = \frac{η}{η'}(R + \cos(θ)n)$$
+$$
+R'_{\perp} = \frac{\eta}{\eta'}(R + \cos\theta n)
+$$
 
-Proof of the Parallel Component Vector $R'_\parallel$:
-1. Find Magnitude of $R'_\parallel$:
-    - Consider the right triangle formed by the unit vector $R'$ and its perpendicular and parallel components. By Pythagorean theorem: $\vert{}R'\vert{}^2 = \vert{}R'_\perp\vert{}^2 + \vert{}R'_\parallel\vert{}^2$.
-    - Since $\vert{}R'\vert{} = 1$: $1 = \vert{}R'_\perp\vert{}^2 + \vert{}R'_\parallel\vert{}^2$.
-    - Rearrange and solve for the required magnitude:
-    $$\vert{}R'_\parallel\vert{} = \sqrt{1 - \vert{}R'_\perp\vert{}^2}$$
+Proof of the Parallel Component Vector $R'_{\parallel}$:
+1. Find Magnitude of $R'_{\parallel}$:
+        - Consider the right triangle formed by the unit vector $R'$ and its perpendicular and parallel components. By the Pythagorean theorem, $\left\lvert R' \right\rvert^2 = \left\lvert R'_{\perp} \right\rvert^2 + \left\lvert R'_{\parallel} \right\rvert^2$.
+    - Since $\left\lvert R' \right\rvert = 1$, $1 = \left\lvert R'_{\perp} \right\rvert^2 + \left\lvert R'_{\parallel} \right\rvert^2$.
+    - Rearrange and solve for the required magnitude: $\left\lvert R'_{\parallel} \right\rvert = \sqrt{1 - \left\lvert R'_{\perp} \right\rvert^2}$.
 
-    Optionally note that physically, $\vert{}R'_\parallel\vert{} = \vert{}R'\vert{}\cos\theta' = \cos\theta'$. The radical form used in code avoids explicit angle calculation via trigonometry by using $1-\sin^2\theta'=\cos^2\theta'$ applied to components).
+    Optionally note that physically, $\left\lvert R'_{\parallel} \right\rvert = \left\lvert R' \right\rvert \cos\theta' = \cos\theta'$. The radical form used in code avoids explicit angle calculation via trigonometry by using $1 - \sin^2\theta' = \cos^2\theta'$ applied to components.
 
-2. Find Direction of $R'_\parallel$:
+2. Find Direction of $R'_{\parallel}$:
     -Based on geometry, the refracted ray $R'$ travels deeper into the material, away from the outward normal vector $n$. Therefore, its parallel component vector must point in the opposite direction of normal vector $n$ (which points out).
     - The inward unit direction is: $-n$.
-3. Assemble Vector $R'_\parallel$:
-    - Assemble by taking known magnitude and multiplying by direction:$$R'_\parallel = (\text{magnitude}) \times (\text{direction}) = |R'_\parallel| \cdot (-n)$$
-    $$R'_\parallel = \sqrt{1 - |R'_\perp|^2} \cdot (-n)$$
-    $$R'_\parallel = -\sqrt{1 - |R'_\perp|^2} \cdot n$$
+3. Assemble Vector $R'_{\parallel}$:
+        - Assemble by taking known magnitude and multiplying by direction: $R'_{\parallel} = (\text{magnitude}) \times (\text{direction}) = \left\lvert R'_{\parallel} \right\rvert \cdot (-n)$.
+
+            Therefore,
+            $R'_{\parallel} = \sqrt{1 - \left\lvert R'_{\perp} \right\rvert^2} \cdot (-n) = -\sqrt{1 - \left\lvert R'_{\perp} \right\rvert^2} \cdot n$.
 
 
 vec3.h
@@ -1886,13 +1972,19 @@ auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 1.0);
 One troublesome practical issue with refraction is that there are ray angles for which no solution is possible using Snell's law.
 
 When a ray enters a medium of lower index of refraction at a sufficiently glancing angle, it can refract with an angle greater than 90°. If we refer back to Snell's law and the derivation of $sinθ'$: 
-$$\sin\theta' = \frac{\eta}{\eta'} \cdot \sin\theta$$
+$$
+\sin\theta' = \frac{\eta}{\eta'} \cdot \sin\theta
+$$
 If the ray is inside glass and outside is air (η=1.5 and η′=1.0): 
 
-$$\sin\theta' = \frac{1.5}{1.0} \cdot \sin\theta = 1.5 \cdot \sin\theta$$
+$$
+\sin\theta' = \frac{1.5}{1.0} \cdot \sin\theta = 1.5 \cdot \sin\theta
+$$
 
 The value of sinθ′ cannot be greater than 1. So, if, 
-$$\frac{1.5}{1.0} \cdot \sin\theta > 1.0$$
+$$
+\frac{1.5}{1.0} \cdot \sin\theta > 1.0
+$$
 
 The equality between the two sides of the equation is broken, and a solution cannot exist. If a solution does not exist, the glass cannot refract, and therefore must reflect the ray: 
 
@@ -1908,10 +2000,14 @@ if (ri * sin_theta > 1.0) {
 ```
 
 Here all the light is reflected, and because in practice that is usually inside solid objects, it is called ***total internal reflection.***
-$$\cos\theta = R \cdot n$$
+$$
+\cos\theta = R \cdot n
+$$
 
 We can solve for sin_theta using the trigonometric identities: 
-$$\sin\theta = \sqrt{1 - \cos^2\theta}$$
+$$
+\sin\theta = \sqrt{1 - \cos^2\theta}
+$$
 
 material.h
 ```c 
@@ -1948,10 +2044,15 @@ auto material_left   = make_shared<dielectric>(1.00 / 1.33);
 
 Now real glass has reflectivity that varies with angle — look at a window at a steep angle and it becomes a mirror. There is a big ugly equation for that, but almost everybody uses a cheap and surprisingly accurate
 
-$$R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5$$
+$$
+R(\theta) = R_0 + (1 - R_0)(1 - \cos\theta)^5
+$$
 
 where
-$$R0​=(\frac {1−η_{ratio}​} {1+η_{ratio}​})^{​2}$$
+
+$$
+R_0 = \left(\frac{1 - \eta_{ratio}}{1 + \eta_{ratio}}\right)^2
+$$
 
 
 material.h
@@ -2302,7 +2403,9 @@ So, ***how large should the defocus disk be?***
 
 Since the size of this disk controls how much defocus blur we get, that should be a parameter of the camera class. We could just take the radius of the disk as a camera parameter, but the blur would vary depending on the projection distance. A slightly easier parameter is to specify ***the angle of the cone with apex at viewport center and base (defocus disk) at the camera center***. This should give you more consistent results as you vary the focus distance for a given shot. 
 
-$$defocusRadius=focusDist×tan(2defocusAngle​)$$
+$$
+\mathrm{defocusRadius} = \mathrm{focusDist} \times \tan\left(\frac{\mathrm{defocusAngle}}{2}\right)
+$$
 
 Since we'll be choosing random points from the defocus disk, we'll need a function to do that: ***random_in_unit_disk()***. This function works using the same kind of method we use in ***random_unit_vector()***, just for two dimensions. 
 
@@ -2492,3 +2595,4 @@ int main() {
 }
 ```
 
+![alt text](Resource/Final_scene.png)
