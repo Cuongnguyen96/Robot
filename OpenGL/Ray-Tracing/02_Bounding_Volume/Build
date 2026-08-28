@@ -1,0 +1,40 @@
+
+ 1529  rm -rf build/
+ 1530  mkdir build
+ 1531  cd build/
+ 1532  make ..
+
+cmake --build .
+cmake ..
+make ..
+ 1546  make
+ 1547  make clean
+ 1548  
+ 1549  make
+ 1550  ./opengl_app 
+
+
+ 1581  rm -rf build/
+ 1582  mdirk build
+ 1583  mkdir build
+ 1584  cd build/
+ 1585  cmake ..
+ 1586  make ..
+ 1587  cmake ..
+ 1588  make ..
+ 1589  ./op
+ 1590  make
+ 1591  ./opengl_app 
+
+
+ 1898  g++ main.cpp -std=c++17 -O2 -o raytrace
+ 1899  ./raytrace > image.ppm
+ 1900  xdg-open image.ppm 
+ 1901  cmake --build build
+
+
+Work 
+2005  cmake -B build -DCMAKE_BUILD_TYPE=Release
+ 2006  cmake --build build
+ 2007  ./build/raytrace > image.ppm -j10
+ 2008  xdg-open image.ppm 

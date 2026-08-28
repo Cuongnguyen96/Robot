@@ -599,9 +599,7 @@ void updateGame(double deltaTime) {
             }
 
             if (isHit) {
-                // Sửa lỗi nổ ở Cannon: Vì ta gọi computeCollisionDetection trực tiếp trên e.mesh,
-                // CHAI3D coi e.mesh là root cục bộ nên m_globalPos trả về thực chất là tọa độ local của enemy (gần (0,0,0)).
-                // Ta sử dụng tọa độ thế giới thực tế của kẻ địch (e.position) để kích nổ đúng vị trí của nó.
+
                 cVector3d collisionPos = e.position;
                 
                 // Spawn explosion effect at exact contact coordinates

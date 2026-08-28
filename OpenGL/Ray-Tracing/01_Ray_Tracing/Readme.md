@@ -1,4 +1,8 @@
 
+https://gabrielgambetta.com/computer-graphics-from-scratch/02-basic-raytracing.html
+
+https://www.pbr-book.org/4ed/Primitives_and_Intersection_Acceleration/Primitive_Interface_and_Geometric_Primitives
+
 # Output an Image
 The catch is, there are so many formats. Many of those are complex. I always start with a plain text ppm file. 
 
