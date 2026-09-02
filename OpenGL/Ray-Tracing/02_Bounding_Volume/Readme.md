@@ -1399,3 +1399,373 @@ int main() {
 ![alt text](Resource/Image/17_Earth_mapped_sphere.png)
 
 # Perlin Noise
+
+https://thebookofshaders.com/11/?lan=vi
+
+To get cool looking solid textures most people use some form of ***Perlin noise***. These are named after their inventor Ken Perlin. Perlin texture doesn’t return white noise like this: 
+
+![alt text](Resource/Image/19_White_noise.png)
+
+
+Instead it returns something similar to blurred white noise: 
+![alt text](Resource/Image/20_White_noise_blurred.png)
+
+A key part of Perlin noise is that it is repeatable: it takes a 3D point as input and always returns the same randomish number. Nearby points return similar numbers. 
+
+Another important part of Perlin noise is that it be simple and fast, so it’s usually done as a hack. I’ll build that hack up incrementally based on Andrew Kensler’s description. 
+
+## Using Blocks of Random Numbers
+
+We could just tile all of space with a 3D array of random numbers and use them in blocks. You get something blocky where the repeating is clear: 
+
+![alt text](Resource/Image/21_Tiled_random_patterns.png)
+
+perlin.h
+```c
+#ifndef PERLIN_H
+#define PERLIN_H
+
+class perlin {
+  public:
+    perlin() {
+        for (int i = 0; i < point_count; i++) {
+            randfloat[i] = random_double();
+        }
+
+        perlin_generate_perm(perm_x);
+        perlin_generate_perm(perm_y);
+        perlin_generate_perm(perm_z);
+    }
+
+    double noise(const point3& p) const {
+        auto i = int(4*p.x()) & 255;
+        auto j = int(4*p.y()) & 255;
+        auto k = int(4*p.z()) & 255;
+
+        return randfloat[perm_x[i] ^ perm_y[j] ^ perm_z[k]];
+    }
+
+  private:
+    static const int point_count = 256;
+    double randfloat[point_count];
+    int perm_x[point_count];
+    int perm_y[point_count];
+    int perm_z[point_count];
+
+    static void perlin_generate_perm(int* p) {
+        for (int i = 0; i < point_count; i++)
+            p[i] = i;
+
+        permute(p, point_count);
+    }
+
+    static void permute(int* p, int n) {
+        for (int i = n-1; i > 0; i--) {
+            int target = random_int(0, i);
+            int tmp = p[i];
+            p[i] = p[target];
+            p[target] = tmp;
+        }
+    }
+};
+
+#endif
+```
+
+texture.h
+
+``` c
+#include "perlin.h"
+#include "rtw_stb_image.h"
+
+...
+class noise_texture : public texture {
+  public:
+    noise_texture() {}
+
+    color value(double u, double v, const point3& p) const override {
+        return color(1,1,1) * noise.noise(p);
+    }
+
+  private:
+    perlin noise;
+};
+```
+
+main.cc
+
+``` c
+void perlin_spheres() {
+    hittable_list world;
+
+    auto pertext = make_shared<noise_texture>();
+    world.add(make_shared<sphere>(point3(0,-1000,0), 1000, make_shared<lambertian>(pertext)));
+    world.add(make_shared<sphere>(point3(0,2,0), 2, make_shared<lambertian>(pertext)));
+
+    camera cam;
+
+    cam.aspect_ratio      = 16.0 / 9.0;
+    cam.image_width       = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_depth         = 50;
+
+    cam.vfov     = 20;
+    cam.lookfrom = point3(13,2,3);
+    cam.lookat   = point3(0,0,0);
+    cam.vup      = vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
+int main() {
+    switch (4) {
+        case 1:  bouncing_spheres();   break;
+        case 2:  checkered_spheres();  break;
+        case 3:  earth();              break;
+        case 4:  perlin_spheres();     break;
+    }
+}
+```
+
+## Smoothing out the Result
+To make it smooth, we can linearly interpolate: 
+
+``` c
+
+class perlin {
+  public:
+    ...
+
+    double noise(const point3& p) const {
+        auto u = p.x() - std::floor(p.x());
+        auto v = p.y() - std::floor(p.y());
+        auto w = p.z() - std::floor(p.z());
+
+        auto i = int(std::floor(p.x()));
+        auto j = int(std::floor(p.y()));
+        auto k = int(std::floor(p.z()));
+        double c[2][2][2];
+
+        for (int di=0; di < 2; di++)
+            for (int dj=0; dj < 2; dj++)
+                for (int dk=0; dk < 2; dk++)
+                    c[di][dj][dk] = randfloat[
+                        perm_x[(i+di) & 255] ^
+                        perm_y[(j+dj) & 255] ^
+                        perm_z[(k+dk) & 255]
+                    ];
+
+        return trilinear_interp(c, u, v, w);
+    }
+
+    ...
+
+  private:
+    ...
+
+    static void permute(int* p, int n) {
+        ...
+    }
+
+    static double trilinear_interp(double c[2][2][2], double u, double v, double w) {
+        auto accum = 0.0;
+        for (int i=0; i < 2; i++)
+            for (int j=0; j < 2; j++)
+                for (int k=0; k < 2; k++)
+                    accum += (i*u + (1-i)*(1-u))
+                           * (j*v + (1-j)*(1-v))
+                           * (k*w + (1-k)*(1-w))
+                           * c[i][j][k];
+
+        return accum;
+    }
+};
+
+```
+
+![alt text](Resource/Image/22_trilinear_interpolation.png)
+
+## Improvement with Hermitian Smoothing
+
+Smoothing yields an improved result, but there are obvious grid features in there. Some of it is Mach bands, a known perceptual artifact of linear interpolation of color. A standard trick is to use a Hermite cubic to round off the interpolation: 
+
+``` c
+class perlin (
+  public:
+    ...
+    double noise(const point3& p) const {
+        auto u = p.x() - std::floor(p.x());
+        auto v = p.y() - std::floor(p.y());
+        auto w = p.z() - std::floor(p.z());
+        u = u*u*(3-2*u);
+        v = v*v*(3-2*v);
+        w = w*w*(3-2*w);
+
+        auto i = int(std::floor(p.x()));
+        auto j = int(std::floor(p.y()));
+        auto k = int(std::floor(p.z()));
+        ...
+
+```
+![alt text](Resource/Image/23_trilinearly_interpolated_smoothed.png)
+
+## Tweaking The Frequency
+It is also a bit low frequency. We can scale the input point to make it vary more quickly: 
+
+``` c
+class noise_texture : public texture {
+  public:
+    noise_texture(double scale) : scale(scale) {}
+
+    color value(double u, double v, const point3& p) const override {
+        return color(1,1,1) * noise.noise(scale * p);
+    }
+
+  private:
+    perlin noise;
+    double scale;
+};
+```
+
+``` c
+void perlin_spheres() {
+    ...
+    auto pertext = make_shared<noise_texture>(4);
+    world.add(make_shared<sphere>(point3(0,-1000,0), 1000, make_shared<lambertian>(pertext)));
+    world.add(make_shared<sphere>(point3(0, 2, 0), 2, make_shared<lambertian>(pertext)));
+
+    camera cam;
+    ...
+}
+```
+
+![alt text](Resource/Image/24_higher_frequency.png)
+
+## Using Random Vectors on the Lattice Points
+This is still a bit blocky looking, probably because the min and max of the pattern always lands exactly on the integer x/y/z. Ken Perlin’s very clever trick was to instead put random unit vectors (instead of just floats) on the lattice points, and use a dot product to move the min and max off the lattice. So, first we need to change the random floats to random vectors. These vectors are any reasonable set of irregular directions, and I won't bother to make them exactly uniform: 
+
+``` c
+class perlin {
+  public:
+    perlin() {
+        for (int i = 0; i < point_count; i++) {
+            randvec[i] = unit_vector(vec3::random(-1,1));
+        }
+
+        perlin_generate_perm(perm_x);
+        perlin_generate_perm(perm_y);
+        perlin_generate_perm(perm_z);
+    }
+
+    ...
+
+  private:
+    static const int point_count = 256;
+    vec3 randvec[point_count];
+    int perm_x[point_count];
+    int perm_y[point_count];
+    int perm_z[point_count];
+    ...
+};
+```
+
+``` c
+class perlin {
+  public:
+    ...
+    double noise(const point3& p) const {
+        auto u = p.x() - std::floor(p.x());
+        auto v = p.y() - std::floor(p.y());
+        auto w = p.z() - std::floor(p.z());
+
+        auto i = int(std::floor(p.x()));
+        auto j = int(std::floor(p.y()));
+        auto k = int(std::floor(p.z()));
+        vec3 c[2][2][2];
+
+        for (int di=0; di < 2; di++)
+            for (int dj=0; dj < 2; dj++)
+                for (int dk=0; dk < 2; dk++)
+                    c[di][dj][dk] = randvec[
+                        perm_x[(i+di) & 255] ^
+                        perm_y[(j+dj) & 255] ^
+                        perm_z[(k+dk) & 255]
+                    ];
+
+        return perlin_interp(c, u, v, w);
+    }
+
+    ...
+};
+
+```
+
+``` c
+class noise_texture : public texture {
+  public:
+    noise_texture(double scale) : scale(scale) {}
+
+    color value(double u, double v, const point3& p) const override {
+        return color(1,1,1) * 0.5 * (1.0 + noise.noise(scale * p));
+    }
+
+  private:
+    perlin noise;
+    double scale;
+};
+```
+
+![alt text](Resource/Image/25_shifted_off_integer_values.png)
+
+## Introducing Turbulence
+Very often, a composite noise that has multiple summed frequencies is used. This is usually called turbulence, and is a sum of repeated calls to noise: 
+
+``` c
+class perlin {
+  ...
+  public:
+    ...
+
+    double noise(const point3& p) const {
+        ...
+    }
+
+    double turb(const point3& p, int depth) const {
+        auto accum = 0.0;
+        auto temp_p = p;
+        auto weight = 1.0;
+
+        for (int i = 0; i < depth; i++) {
+            accum += weight * noise(temp_p);
+            weight *= 0.5;
+            temp_p *= 2;
+        }
+
+        return std::fabs(accum);
+    }
+
+    ...
+```
+![alt text](Resource/Image/26_turbulence.png)
+
+## Adjusting the Phase
+However, usually turbulence is used indirectly. For example, the “hello world” of procedural solid textures is a simple marble-like texture. The basic idea is to make color proportional to something like a sine function, and use turbulence to adjust the phase (so it shifts x in sin(x)) which makes the stripes undulate. Commenting out straight noise and turbulence, and giving a marble-like effect is: 
+
+``` c
+class noise_texture : public texture {
+  public:
+    noise_texture(double scale) : scale(scale) {}
+
+    color value(double u, double v, const point3& p) const override {
+        return color(.5, .5, .5) * (1 + std::sin(scale * p.z() + 10 * noise.turb(p, 7)));
+    }
+
+  private:
+    perlin noise;
+    double scale;
+};
+```
+
+![alt text](Resource/Image/27_marbled_texture.png)
