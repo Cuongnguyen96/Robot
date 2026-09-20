@@ -2,6 +2,7 @@
 #define MATERIAL_H
 
 #include "hittable.h"
+#include "texture.h"
 
 class material {
 public: 
@@ -88,5 +89,4 @@ private:
         return r0 + (1-r0)*std::pow((1 - cosine),5);
     }
 };
-
 #endif
