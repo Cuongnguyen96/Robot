@@ -90,4 +90,14 @@ private:
 
 const aabb aabb::empty    = aabb(interval::empty,    interval::empty,    interval::empty);
 const aabb aabb::universe = aabb(interval::universe, interval::universe, interval::universe);
+
+
+aabb operator+(const aabb& bbox, const vec3& offset) {
+    // Return a new AABB that is the input AABB translated by the offset vector
+    return aabb(bbox.x + offset.x(), bbox.y + offset.y(), bbox.z + offset.z());
+}
+
+aabb operator+(const vec3& offset, const aabb& box) {
+    return box + offset;
+}
 #endif
