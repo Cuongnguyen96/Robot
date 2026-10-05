@@ -2899,3 +2899,387 @@ void cornell_box() {
 
 ![alt text](Resource/Image/45_Standard_Cornell_box_scene.png)
 
+# Volumes
+
+One thing it’s nice to add to a ray tracer is smoke/fog/mist. These are sometimes called ***volumes*** or ***participating media***. Another feature that is nice to add is subsurface scattering, which is sort of like dense fog inside an object. 
+
+This usually adds software architectural mayhem because volumes are a different animal than surfaces, ***but a cute technique is to make a volume a random surface. A bunch of smoke can be replaced with a surface that probabilistically might or might not be there at every point in the volume***. This will make more sense when you see the code. 
+
+## Constant Density Mediums
+First, let’s start with a volume of constant density. A ray going through there can either scatter inside the volume, or it can make it all the way through like the middle ray in the figure. More thin transparent volumes, like a light fog, are more likely to have rays like the middle one. How far the ray has to travel through the volume also determines how likely it is for the ray to make it through.
+
+![alt text](Resource/Image/46_Ray_volume_interaction.png)
+
+As the ray passes through the volume, it may scatter at any point. The denser the volume, the more likely that is. The probability that the ray scatters in any small distance $ΔL$ is: 
+
+$$probability=C⋅ΔL$$
+
+- where $C$ is proportional to the optical density of the volume. 
+- If you go through all the differential equations, for a random number you get a distance where the scattering occurs.
+- If that distance is outside the volume, then there is no “hit”.
+- For a constant volume we just need the density $C$ and the boundary. 
+- If a ray travels an infinitesimal distance $\Delta L \to 0$
+- The probability of the ray colliding with (and scattering off) a particle within that tiny interval $\Delta L$ is directly proportional to:
+$$\text{Probability}(\text{collision within } \Delta L) \approx C \cdot \Delta L$$
+
+
+***The Physics &amp; Math of Volume Scattering:***
+
+When a ray travels through a volume with uniform density $D$:
+- The Beer-Lambert law states that the intensity of light $I$ passing through a medium is attenuated according to a function of the path length $s$ and the concentration $D$ of that medium.
+
+- The probability of the ray passing through a distance $s$ without colliding with any particle is governed by the ***Beer-Lambert*** Law: 
+$$\frac{I(s)}{I_0} = P(\text{no collision}) = e^{-D \cdot s}$$
+
+- To randomly sample the exact distance $s$ at which a ray hits a particle inside the volume, we use ***Inverse Transform*** Sampling: 
+
+$$s = -\frac{ln(\xi)}{D}$$
+
+- (where $\xi \in [0, 1)$ is a uniform random float).
+
+***The `constant_medium` Class &amp; Hit Algorithm:***
+
+
+1. **Find Boundary Intersections**: The ray enters the boundary at parameter $t_1$ and exits at $t_2$.
+2. **Calculate Distance Inside the Volume**
+$$\Delta L = (t_2 - t_1) \cdot |\mathbf{d}|$$
+3. **Sample Random Distance $s$**: 
+$$s = -\frac{\ln(\text{random\_double}())}{\text{density}}$$
+4. **Evaluate Collision**:
+- If $s \le \Delta L$: A collision occurs with a smoke/fog particle inside the volume at parameter $t_{\text{hit}} = t_1 + s / |\mathbf{d}|$.
+- If $s > \Delta L$: The ray passes completely through the volume without hitting any particles.
+
+
+***Mathematical Proof:***
+
+Step 1: Formulate the Differential Equation for Survival ProbabilityLet $S(l)$ be the Survival Probability—the probability that a ray travels distance $l$ without colliding with any particle.
+
+To survive an additional small distance $\Delta L$, two independent events must occur:
+1. The ray must survive the initial distance $l$ (probability $S(l)$).
+2. The ray must not collide in the next small interval $\Delta L$ (probability $1 - C \cdot \Delta L$).
+
+By the multiplication rule for independent probabilities:
+$$S(l + \Delta L) = S(l) \cdot (1 - C \cdot \Delta L)$$
+$$S(l + \Delta L) = S(l) - C \cdot S(l) \cdot \Delta L$$
+$$\frac{S(l + \Delta L) - S(l)}{\Delta L} = -C \cdot S(l)$$
+
+Taking the limit as $\Delta L \to 0$ yields the differential equation:
+$$\frac{dS(l)}{dl} = -C \cdot S(l)$$
+
+
+Step 2: Solve the Differential Equation (Deriving the Beer-Lambert Law)
+
+Separate variables and integrate both sides from $l = 0$ to $l = s$:
+
+$$\int_{0}^{s} \frac{1}{S(l)} \, dS(l) = \int_{0}^{s} -C \, dl$$
+$$\ln(S(s)) - \ln(S(0)) = -C \cdot s$$
+
+Since the ray definitely hasn't collided at distance $l = 0$, we have $S(0) = 1 \implies \ln(1) = 0$:
+
+$$\ln(S(s)) = -C \cdot s \implies S(s) = e^{-C \cdot s}$$
+
+📌 Result 1: The probability of a ray surviving distance $s$ without colliding is: $$P(\text{No collision over distance } s) = e^{-C \cdot s}$$
+
+Step 3: Derive Random Collision Distance $s$ via Inverse Transform Sampling
+
+The Cumulative Distribution Function $F(s)$ represents the probability that a collision occurs at or before distance $s$:
+
+$$F(s) = 1 - P(\text{No collision over distance } s) = 1 - e^{-C \cdot s}$$
+
+To randomly sample a collision distance $s$ on a computer, we set $F(s)$ equal to a uniform random float $U \in [0, 1)$:
+
+$$1 - e^{-C \cdot s} = U$$
+
+$$e^{-C \cdot s} = 1 - U$$
+
+Take the natural logarithm ($\ln$) of both sides:
+$$-C \cdot s = \ln(1 - U)$$
+
+$$s = -\frac{\ln(1 - U)}{C}$$
+
+Since $U \sim \text{Uniform}[0, 1)$, $\xi = 1 - U$ is also uniformly distributed in $(0, 1]$. Replacing $1 - U$ with a random float random_double(), we get the final sampling formula:
+
+$$s = -\frac{\ln(\xi)}{C}$$
+
+constant_medium.h
+``` c
+#ifndef CONSTANT_MEDIUM_H
+#define CONSTANT_MEDIUM_H
+
+#include "hittable.h"
+#include "material.h"
+#include "texture.h"
+
+class constant_medium : public hittable {
+  public:
+    constant_medium(shared_ptr<hittable> boundary, double density, shared_ptr<texture> tex)
+      : boundary(boundary), neg_inv_density(-1/density),
+        phase_function(make_shared<isotropic>(tex))
+    {}
+
+    constant_medium(shared_ptr<hittable> boundary, double density, const color& albedo)
+      : boundary(boundary), neg_inv_density(-1/density),
+        phase_function(make_shared<isotropic>(albedo))
+    {}
+
+    bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+        hit_record rec1, rec2;
+
+        if (!boundary->hit(r, interval::universe, rec1))
+            return false;
+
+        if (!boundary->hit(r, interval(rec1.t+0.0001, infinity), rec2))
+            return false;
+
+        if (rec1.t < ray_t.min) rec1.t = ray_t.min;
+        if (rec2.t > ray_t.max) rec2.t = ray_t.max;
+
+        if (rec1.t >= rec2.t)
+            return false;
+
+        if (rec1.t < 0)
+            rec1.t = 0;
+
+        auto ray_length = r.direction().length();
+        auto distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
+        auto hit_distance = neg_inv_density * std::log(random_double());
+
+        if (hit_distance > distance_inside_boundary)
+            return false;
+
+        rec.t = rec1.t + hit_distance / ray_length;
+        rec.p = r.at(rec.t);
+
+        rec.normal = vec3(1,0,0);  // arbitrary
+        rec.front_face = true;     // also arbitrary
+        rec.mat = phase_function;
+
+        return true;
+    }
+
+    aabb bounding_box() const override { return boundary->bounding_box(); }
+
+  private:
+    shared_ptr<hittable> boundary;
+    double neg_inv_density;
+    shared_ptr<material> phase_function;
+};
+
+#endif
+```
+
+When a ray hits a hard surface, its reflection direction is dictated by surface properties (`lambertian` or `metal`). When a ray hits a volumetric particle, the scattering direction is governed by a **Phase Function**.
+
+For simple homogeneous media, we use an **Isotropic Phase Function**: the scattered ray is bounced in a **completely random 3D direction** (`random_unit_vector()`) with equal probability in all directions.
+
+material.h
+```c
+class diffuse_light : public material {
+    ...
+};
+
+class isotropic : public material {
+  public:
+    isotropic(const color& albedo) : tex(make_shared<solid_color>(albedo)) {}
+    isotropic(shared_ptr<texture> tex) : tex(tex) {}
+
+    bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+    const override {
+        scattered = ray(rec.p, random_unit_vector(), r_in.time());
+        attenuation = tex->value(rec.u, rec.v, rec.p);
+        return true;
+    }
+
+  private:
+    shared_ptr<texture> tex;
+};
+```
+
+The reason we have to be so careful about the logic around the boundary is we need to make sure this works for ray origins inside the volume. In clouds, things bounce around a lot so that is a common case. 
+
+
+In addition, the above code assumes that once a ray exits the constant medium boundary, it will continue forever outside the boundary. Put another way, it assumes that ***the boundary shape is convex***. So this particular implementation will work for boundaries like boxes or spheres, but will not work with toruses or shapes that contain voids.
+
+## Rendering a Cornell Box with Smoke and Fog Boxes
+
+
+If we replace the two blocks with smoke and fog (dark and light particles), and make the light bigger (and dimmer so it doesn’t blow out the scene) for faster convergence: 
+
+
+``` c
+#include "bvh.h"
+#include "camera.h"
+#include "constant_medium.h"
+#include "hittable.h"
+#include "hittable_list.h"
+#include "material.h"
+#include "quad.h"
+#include "sphere.h"
+#include "texture.h"
+
+...
+
+void cornell_smoke() {
+    hittable_list world;
+
+    auto red   = make_shared<lambertian>(color(.65, .05, .05));
+    auto white = make_shared<lambertian>(color(.73, .73, .73));
+    auto green = make_shared<lambertian>(color(.12, .45, .15));
+    auto light = make_shared<diffuse_light>(color(7, 7, 7));
+
+    world.add(make_shared<quad>(point3(555,0,0), vec3(0,555,0), vec3(0,0,555), green));
+    world.add(make_shared<quad>(point3(0,0,0), vec3(0,555,0), vec3(0,0,555), red));
+    world.add(make_shared<quad>(point3(113,554,127), vec3(330,0,0), vec3(0,0,305), light));
+    world.add(make_shared<quad>(point3(0,555,0), vec3(555,0,0), vec3(0,0,555), white));
+    world.add(make_shared<quad>(point3(0,0,0), vec3(555,0,0), vec3(0,0,555), white));
+    world.add(make_shared<quad>(point3(0,0,555), vec3(555,0,0), vec3(0,555,0), white));
+
+    shared_ptr<hittable> box1 = box(point3(0,0,0), point3(165,330,165), white);
+    box1 = make_shared<rotate_y>(box1, 15);
+    box1 = make_shared<translate>(box1, vec3(265,0,295));
+
+    shared_ptr<hittable> box2 = box(point3(0,0,0), point3(165,165,165), white);
+    box2 = make_shared<rotate_y>(box2, -18);
+    box2 = make_shared<translate>(box2, vec3(130,0,65));
+
+    world.add(make_shared<constant_medium>(box1, 0.01, color(0,0,0)));
+    world.add(make_shared<constant_medium>(box2, 0.01, color(1,1,1)));
+
+    camera cam;
+
+    cam.aspect_ratio      = 1.0;
+    cam.image_width       = 600;
+    cam.samples_per_pixel = 200;
+    cam.max_depth         = 50;
+    cam.background        = color(0,0,0);
+
+    cam.vfov     = 40;
+    cam.lookfrom = point3(278, 278, -800);
+    cam.lookat   = point3(278, 278, 0);
+    cam.vup      = vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
+int main() {
+    switch (8) {
+        case 1:  bouncing_spheres();   break;
+        case 2:  checkered_spheres();  break;
+        case 3:  earth();              break;
+        case 4:  perlin_spheres();     break;
+        case 5:  quads();              break;
+        case 6:  simple_light();       break;
+        case 7:  cornell_box();        break;
+        case 8:  cornell_smoke();      break;
+    }
+}
+```
+
+![alt text](Resource/Image/47_smoke.png)
+
+# A Scene Testing All New Features
+
+Let’s put it all together, with a big thin mist covering everything, and a blue subsurface reflection sphere (we didn’t implement that explicitly, but a volume inside a dielectric is what a subsurface material is). The biggest limitation left in the renderer is no shadow rays, but that is why we get caustics and subsurface for free. It’s a double-edged design decision.
+
+Also note that we'll parameterize this final scene to support a lower quality render for quick testing.
+
+``` C
+void final_scene(int image_width, int samples_per_pixel, int max_depth) {
+    hittable_list boxes1;
+    auto ground = make_shared<lambertian>(color(0.48, 0.83, 0.53));
+
+    int boxes_per_side = 20;
+    for (int i = 0; i < boxes_per_side; i++) {
+        for (int j = 0; j < boxes_per_side; j++) {
+            auto w = 100.0;
+            auto x0 = -1000.0 + i*w;
+            auto z0 = -1000.0 + j*w;
+            auto y0 = 0.0;
+            auto x1 = x0 + w;
+            auto y1 = random_double(1,101);
+            auto z1 = z0 + w;
+
+            boxes1.add(box(point3(x0,y0,z0), point3(x1,y1,z1), ground));
+        }
+    }
+
+    hittable_list world;
+
+    world.add(make_shared<bvh_node>(boxes1));
+
+    auto light = make_shared<diffuse_light>(color(7, 7, 7));
+    world.add(make_shared<quad>(point3(123,554,147), vec3(300,0,0), vec3(0,0,265), light));
+
+    auto center1 = point3(400, 400, 200);
+    auto center2 = center1 + vec3(30,0,0);
+    auto sphere_material = make_shared<lambertian>(color(0.7, 0.3, 0.1));
+    world.add(make_shared<sphere>(center1, center2, 50, sphere_material));
+
+    world.add(make_shared<sphere>(point3(260, 150, 45), 50, make_shared<dielectric>(1.5)));
+    world.add(make_shared<sphere>(
+        point3(0, 150, 145), 50, make_shared<metal>(color(0.8, 0.8, 0.9), 1.0)
+    ));
+
+    auto boundary = make_shared<sphere>(point3(360,150,145), 70, make_shared<dielectric>(1.5));
+    world.add(boundary);
+    world.add(make_shared<constant_medium>(boundary, 0.2, color(0.2, 0.4, 0.9)));
+    boundary = make_shared<sphere>(point3(0,0,0), 5000, make_shared<dielectric>(1.5));
+    world.add(make_shared<constant_medium>(boundary, .0001, color(1,1,1)));
+
+    auto emat = make_shared<lambertian>(make_shared<image_texture>("earthmap.jpg"));
+    world.add(make_shared<sphere>(point3(400,200,400), 100, emat));
+    auto pertext = make_shared<noise_texture>(0.2);
+    world.add(make_shared<sphere>(point3(220,280,300), 80, make_shared<lambertian>(pertext)));
+
+    hittable_list boxes2;
+    auto white = make_shared<lambertian>(color(.73, .73, .73));
+    int ns = 1000;
+    for (int j = 0; j < ns; j++) {
+        boxes2.add(make_shared<sphere>(point3::random(0,165), 10, white));
+    }
+
+    world.add(make_shared<translate>(
+        make_shared<rotate_y>(
+            make_shared<bvh_node>(boxes2), 15),
+            vec3(-100,270,395)
+        )
+    );
+
+    camera cam;
+
+    cam.aspect_ratio      = 1.0;
+    cam.image_width       = image_width;
+    cam.samples_per_pixel = samples_per_pixel;
+    cam.max_depth         = max_depth;
+    cam.background        = color(0,0,0);
+
+    cam.vfov     = 40;
+    cam.lookfrom = point3(478, 278, -600);
+    cam.lookat   = point3(278, 278, 0);
+    cam.vup      = vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
+int main() {
+    switch (9) {
+        case 1:  bouncing_spheres();          break;
+        case 2:  checkered_spheres();         break;
+        case 3:  earth();                     break;
+        case 4:  perlin_spheres();            break;
+        case 5:  quads();                     break;
+        case 6:  simple_light();              break;
+        case 7:  cornell_box();               break;
+        case 8:  cornell_smoke();             break;
+        case 9:  final_scene(800, 10000, 40); break;
+        default: final_scene(400,   250,  4); break;
+    }
+}
+```
+
+![alt text](Resource/Image/48_Final_scene.png)
+
